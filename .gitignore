@@ -9,4 +9,4 @@ app/build/
 .venv/
 __pycache__/
 tools/spese_importate.csv
-/*.xlsx
+*.xlsx

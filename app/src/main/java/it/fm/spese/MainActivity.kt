@@ -115,7 +115,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import org.xmlpull.v1.XmlPullParser
-import org.xmlpull.v1.XmlPullParserFactory
+import org.kxml2.io.KXmlParser
 import java.io.ByteArrayInputStream
 import java.io.InputStream
 import java.text.NumberFormat
@@ -186,6 +186,8 @@ fun parseAmount(raw: String?): Double? {
         .replace("€", "")
         .replace(" ", "")
         .replace("\u00A0", "")
+        .replace("\"", "")
+        .removePrefix("\uFEFF")
 
     if (cleaned.isBlank()) return null
 
@@ -2826,6 +2828,12 @@ private fun SetBudgetDialog(
  */
 object XlsSheetImporter {
 
+    internal fun parseXlsxBytesForTest(bytes: ByteArray): List<Expense> =
+        parseXlsxStream(ByteArrayInputStream(bytes))
+
+    internal fun parseCsvContentForTest(content: String): List<Expense> =
+        parseCsvStream(content.byteInputStream())
+
     fun importFromUri(context: Context, uri: Uri): List<Expense> {
         val fileName = getFileName(context, uri).lowercase()
 
@@ -2855,21 +2863,34 @@ object XlsSheetImporter {
 
     private fun parseCsvStream(inputStream: InputStream): List<Expense> {
         val expenses = mutableListOf<Expense>()
-        val reader = inputStream.bufferedReader()
-        val lines = reader.readLines()
-        if (lines.isEmpty()) return emptyList()
+        val records = inputStream.bufferedReader().useLines { lines ->
+            lines.map(::parseCsvLine).filter { it.any(String::isNotBlank) }.toList()
+        }
+        if (records.isEmpty()) return emptyList()
+
+        val header = records.first().map { it.trim().removePrefix("\uFEFF").lowercase(Locale.ITALY) }
+        if (header.any { it == "importo" }) {
+            return records.drop(1).mapNotNull { record ->
+                if (record.size < 4) return@mapNotNull null
+                val amount = parseAmount(record[3]) ?: return@mapNotNull null
+                if (amount <= 0) return@mapNotNull null
+                Expense(
+                    title = record[1].trim().ifBlank { "Spesa" },
+                    category = record[2].trim().ifBlank { "Altro" },
+                    amount = amount,
+                    month = record[0].trim().ifBlank { "settembre 26" }
+                )
+            }
+        }
 
         val categoryHeaderMap = mutableMapOf<Int, String>()
 
-        for (line in lines.drop(1)) {
-            val parts = line.split(",", limit = 3)
+        for (parts in records.drop(1)) {
             if (parts.size < 3) continue
 
-            val sheetName = parts[0].trim()
+            val sheetName = parts[0].trim().ifBlank { "settembre 26" }
             val rowNum = parts[1].trim().toIntOrNull() ?: continue
-            val rawValues = parts[2].trim()
-
-            val values = rawValues.split("|").map { it.trim() }
+            val values = parts[2].split("|").map { it.trim() }
 
             if (rowNum == 2) {
                 categoryHeaderMap.clear()
@@ -2895,6 +2916,32 @@ object XlsSheetImporter {
             }
         }
         return expenses
+    }
+
+    private fun parseCsvLine(line: String): List<String> {
+        val fields = mutableListOf<String>()
+        val field = StringBuilder()
+        var quoted = false
+        var index = 0
+
+        while (index < line.length) {
+            val character = line[index]
+            when {
+                character == '"' && quoted && index + 1 < line.length && line[index + 1] == '"' -> {
+                    field.append('"')
+                    index++
+                }
+                character == '"' -> quoted = !quoted
+                character == ',' && !quoted -> {
+                    fields.add(field.toString())
+                    field.clear()
+                }
+                else -> field.append(character)
+            }
+            index++
+        }
+        fields.add(field.toString().trimEnd('\r'))
+        return fields
     }
 
     private fun parseXlsxStream(inputStream: InputStream): List<Expense> {
@@ -2932,13 +2979,15 @@ object XlsSheetImporter {
 
         if (sheetsList.isNotEmpty()) {
             sheetsList.forEach { (sheetName, rId) ->
-                if (sheetName.uppercase().contains("RIEPILOGO") || sheetName.uppercase().contains("SOMMARIO")) {
+                val normalizedSheetName = sheetName.trim().uppercase(Locale.ITALY)
+                if (normalizedSheetName == "TEMPLATE" || normalizedSheetName.contains("RIEPILOGO") || normalizedSheetName.contains("SOMMARIO")) {
                     return@forEach
                 }
 
                 val targetPath = relsMap[rId] ?: ""
-                val fullPath = if (targetPath.startsWith("xl/")) targetPath else "xl/$targetPath"
-                val sheetBytes = sheetDataMap[fullPath] ?: sheetDataMap.entries.firstOrNull { it.key.contains(targetPath) }?.value
+                val fullPath = normalizeZipPath(targetPath)
+                val sheetBytes = sheetDataMap[fullPath]
+                    ?: sheetDataMap.entries.firstOrNull { it.key.endsWith(targetPath.trimStart('/')) }?.value
 
                 if (sheetBytes != null) {
                     expenses.addAll(parseSheetXml(sheetBytes, sheetName, sharedStrings))
@@ -2955,9 +3004,7 @@ object XlsSheetImporter {
 
     private fun parseWorkbookRels(bytes: ByteArray): Map<String, String> {
         val map = mutableMapOf<String, String>()
-        val factory = XmlPullParserFactory.newInstance()
-        val parser = factory.newPullParser()
-        parser.setInput(ByteArrayInputStream(bytes), "UTF-8")
+        val parser = xmlParser(bytes)
 
         var eventType = parser.eventType
         while (eventType != XmlPullParser.END_DOCUMENT) {
@@ -2973,11 +3020,23 @@ object XlsSheetImporter {
         return map
     }
 
+    private fun normalizeZipPath(target: String): String {
+        val parts = target.trimStart('/').split('/')
+        val normalized = ArrayDeque<String>()
+        parts.forEach { part ->
+            when (part) {
+                "", "." -> Unit
+                ".." -> if (normalized.isNotEmpty()) normalized.removeLast()
+                else -> normalized.addLast(part)
+            }
+        }
+        val path = normalized.joinToString("/")
+        return if (path.startsWith("xl/")) path else "xl/$path"
+    }
+
     private fun parseWorkbookSheets(bytes: ByteArray): List<Pair<String, String>> {
         val list = mutableListOf<Pair<String, String>>()
-        val factory = XmlPullParserFactory.newInstance()
-        val parser = factory.newPullParser()
-        parser.setInput(ByteArrayInputStream(bytes), "UTF-8")
+        val parser = xmlParser(bytes)
 
         var eventType = parser.eventType
         while (eventType != XmlPullParser.END_DOCUMENT) {
@@ -2997,9 +3056,7 @@ object XlsSheetImporter {
 
     private fun parseSharedStrings(bytes: ByteArray): List<String> {
         val strings = mutableListOf<String>()
-        val factory = XmlPullParserFactory.newInstance()
-        val parser = factory.newPullParser()
-        parser.setInput(ByteArrayInputStream(bytes), "UTF-8")
+        val parser = xmlParser(bytes)
 
         var eventType = parser.eventType
         var currentText = StringBuilder()
@@ -3033,9 +3090,7 @@ object XlsSheetImporter {
 
     private fun parseSheetXml(bytes: ByteArray, sheetName: String, sharedStrings: List<String>): List<Expense> {
         val expenses = mutableListOf<Expense>()
-        val factory = XmlPullParserFactory.newInstance()
-        val parser = factory.newPullParser()
-        parser.setInput(ByteArrayInputStream(bytes), "UTF-8")
+        val parser = xmlParser(bytes)
 
         var eventType = parser.eventType
         var currentRowNum = -1
@@ -3053,15 +3108,7 @@ object XlsSheetImporter {
                         val cellType = parser.getAttributeValue(null, "t") ?: ""
                         val colIndex = getColIndexFromRef(cellRef)
 
-                        var cellVal = ""
-                        while (parser.next() != XmlPullParser.END_TAG || parser.name != "c") {
-                            if (parser.eventType == XmlPullParser.START_TAG && parser.name == "v") {
-                                parser.next()
-                                if (parser.eventType == XmlPullParser.TEXT) {
-                                    cellVal = parser.text ?: ""
-                                }
-                            }
-                        }
+                        var cellVal = readCellValue(parser, cellType)
 
                         if (cellType == "s" && cellVal.toIntOrNull() != null) {
                             val strIdx = cellVal.toInt()
@@ -3106,6 +3153,32 @@ object XlsSheetImporter {
         }
 
         return expenses
+    }
+
+    private fun xmlParser(bytes: ByteArray): XmlPullParser {
+        return KXmlParser().apply {
+            setInput(ByteArrayInputStream(bytes), "UTF-8")
+        }
+    }
+
+    private fun readCellValue(parser: XmlPullParser, cellType: String): String {
+        val value = StringBuilder()
+        var captureText = false
+        var eventType = parser.next()
+
+        while (eventType != XmlPullParser.END_DOCUMENT) {
+            if (eventType == XmlPullParser.END_TAG && parser.name == "c") break
+
+            when (eventType) {
+                XmlPullParser.START_TAG -> {
+                    captureText = parser.name == "v" || (cellType == "inlineStr" && parser.name == "t")
+                }
+                XmlPullParser.TEXT -> if (captureText) value.append(parser.text)
+                XmlPullParser.END_TAG -> if (parser.name == "v" || parser.name == "t") captureText = false
+            }
+            eventType = parser.next()
+        }
+        return value.toString()
     }
 
     private fun getColIndexFromRef(ref: String): Int {

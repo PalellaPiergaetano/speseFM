@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import posixpath
 import sys
 import zipfile
 from pathlib import Path
@@ -12,18 +13,37 @@ NS = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 
 
 def shared_strings(book: zipfile.ZipFile) -> list[str]:
+    if "xl/sharedStrings.xml" not in book.namelist():
+        return []
     root = ElementTree.fromstring(book.read("xl/sharedStrings.xml"))
     return ["".join(node.text or "" for node in item.findall(".//x:t", NS)) for item in root.findall("x:si", NS)]
+
+
+def worksheet_targets(book: zipfile.ZipFile) -> dict[str, bytes]:
+    relations = ElementTree.fromstring(book.read("xl/_rels/workbook.xml.rels"))
+    relation_map = {
+        relation.attrib["Id"]: posixpath.normpath(posixpath.join("xl", relation.attrib["Target"].lstrip("/")))
+        for relation in relations
+        if relation.attrib.get("Type", "").endswith("/worksheet")
+    }
+    workbook = ElementTree.fromstring(book.read("xl/workbook.xml"))
+    targets = {}
+    for sheet in workbook.findall("x:sheets/x:sheet", NS):
+        relation_id = sheet.attrib.get("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id")
+        target = relation_map.get(relation_id or "")
+        if target in book.namelist():
+            targets[sheet.attrib["name"]] = book.read(target)
+    return targets
 
 
 def export(source: Path, destination: Path) -> int:
     with zipfile.ZipFile(source) as book:
         strings = shared_strings(book)
-        workbook = ElementTree.fromstring(book.read("xl/workbook.xml"))
-        sheets = workbook.findall("x:sheets/x:sheet", NS)
         rows_out: list[dict[str, str]] = []
-        for sheet_number, sheet in enumerate(sheets[1:], start=2):
-            root = ElementTree.fromstring(book.read(f"xl/worksheets/sheet{sheet_number}.xml"))
+        for sheet_name, sheet_bytes in worksheet_targets(book).items():
+            if sheet_name.strip().lower() == "template":
+                continue
+            root = ElementTree.fromstring(sheet_bytes)
             for row in root.findall(".//x:row", NS):
                 cells = row.findall("x:c", NS)
                 values = []
@@ -33,7 +53,7 @@ def export(source: Path, destination: Path) -> int:
                         value = strings[int(value)]
                     values.append(value)
                 if any(values):
-                    rows_out.append({"mese": sheet.attrib["name"], "riga": str(row.attrib["r"]), "valori": " | ".join(values)})
+                    rows_out.append({"mese": sheet_name, "riga": str(row.attrib["r"]), "valori": " | ".join(values)})
     with destination.open("w", newline="", encoding="utf-8") as output:
         writer = csv.DictWriter(output, fieldnames=["mese", "riga", "valori"])
         writer.writeheader()

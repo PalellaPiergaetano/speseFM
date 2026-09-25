@@ -5,17 +5,18 @@
 Nella dashboard il comando di importazione apre il selettore file Android. L’app sceglie il parser in base al nome del file:
 
 - file con estensione `.csv`: parser CSV;
-- ogni altro file: parser Excel OpenXML (`.xlsx`).
+- file `.xlsx` o `.xlsm`: parser Excel OpenXML;
+- il vecchio formato binario `.xls` non è supportato: va salvato da Excel come `.xlsx`.
 
 Un file non leggibile o privo di movimenti validi produce un messaggio di errore e non modifica i dati già presenti.
 
 ## Workbook Excel supportato
 
-Il parser `.xlsx` legge direttamente il formato OpenXML senza librerie Python o dipendenze Excel sul dispositivo. Per ogni foglio:
+Il parser `.xlsx` legge direttamente il formato OpenXML senza dipendenze Excel sul dispositivo. Per ogni foglio:
 
 1. legge `xl/workbook.xml` e le relazioni verso i worksheet;
 2. risolve le stringhe condivise in `xl/sharedStrings.xml`;
-3. ignora fogli chiamati `RIEPILOGO` o `SOMMARIO`;
+3. ignora i fogli `template`, `RIEPILOGO` e `SOMMARIO`;
 4. usa la riga 2 come intestazione delle categorie;
 5. legge le righe 3-39 e le colonne A-F;
 6. ignora la colonna `TOTALE`;
@@ -65,6 +66,7 @@ Quando sono presenti sia punto sia virgola, l’ultimo separatore viene trattato
 ## Limiti noti
 
 - il parser lavora sulle righe 3-39 del template;
+- il formato legacy `.xls` non è supportato;
 - file Excel con layout diverso possono importare zero movimenti o categorie errate;
 - l’importazione aggiunge i movimenti a quelli esistenti e non deduplica;
 - il CSV esportato dall’app è un backup semplice e non è lo stesso CSV intermedio accettato dal parser;

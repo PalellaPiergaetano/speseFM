@@ -86,7 +86,7 @@ Controlli utili:
 ./gradlew test
 ```
 
-Al momento il progetto non contiene test automatici applicativi; `lint` e la compilazione sono i controlli disponibili.
+Sono presenti test JVM per il parser XLSX/CSV; `lint`, test e compilazione sono i controlli disponibili.
 
 ## Struttura
 
