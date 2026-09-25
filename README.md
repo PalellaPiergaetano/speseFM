@@ -1,6 +1,20 @@
 # Spese FM
 
-Applicazione Android locale per sostituire il foglio spese mensile con inserimento rapido, importazione Excel/CSV, filtri, report, budget e suggerimenti sulle categorie più costose.
+### Trasforma le tue spese in scelte migliori.
+
+Spese FM è il tuo centro di controllo personale per capire dove finiscono i soldi e ritrovare margine, senza complicare la vita con fogli di calcolo. Importa lo storico che hai già, registra una nuova uscita in pochi secondi e lascia che report chiari e suggerimenti mirati trasformino i numeri in decisioni concrete.
+
+Tutto resta sul tuo dispositivo: i tuoi dati finanziari rimangono privati, disponibili anche quando non hai una connessione.
+
+**Importa. Capisci. Risparmia.**
+
+## Perché Spese FM
+
+- **Parti da ciò che hai già**: importa il tuo workbook Excel o un CSV senza ricopiare mesi di movimenti.
+- **Registra al volo**: scrivi una frase come `cena 24,50` e l’app riconosce importo e categoria.
+- **Vedi il quadro completo**: dashboard, grafico a ciambella, medie, spesa massima e confronto tra anni.
+- **Agisci sui dati**: imposta un budget e ricevi un suggerimento sulla categoria che pesa di più.
+- **Proteggi ciò che conta**: biometria all’accesso e modalità privacy per nascondere gli importi in un tocco.
 
 ## Stato del progetto
 
