@@ -2,11 +2,13 @@
 
 ## Importazione dall’app
 
-Nella dashboard il comando di importazione apre il selettore file Android. L’app sceglie il parser in base al nome del file:
+Nella dashboard il comando di importazione apre il selettore file Android. L’app legge il nome quando disponibile e controlla anche la firma del contenuto:
 
-- file con estensione `.csv`: parser CSV;
+- file con estensione `.csv`, o contenuto testuale senza estensione: parser CSV;
 - file `.xlsx` o `.xlsm`: parser Excel OpenXML;
 - il vecchio formato binario `.xls` non è supportato: va salvato da Excel come `.xlsx`.
+
+Il controllo della firma evita che un CSV venga interpretato come XLSX quando il `DocumentProvider` restituisce un URI senza `DISPLAY_NAME`. Un file OpenXML viene riconosciuto dalla firma ZIP `PK`.
 
 Un file non leggibile o privo di movimenti validi produce un messaggio di errore e non modifica i dati già presenti.
 
@@ -65,7 +67,7 @@ Quando sono presenti sia punto sia virgola, l’ultimo separatore viene trattato
 
 ## Limiti noti
 
-- il parser lavora sulle righe 3-39 del template;
+- il parser lavora sulle righe 3-39 del template mensile;
 - il formato legacy `.xls` non è supportato;
 - file Excel con layout diverso possono importare zero movimenti o categorie errate;
 - l’importazione aggiunge i movimenti a quelli esistenti e non deduplica;

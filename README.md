@@ -27,7 +27,7 @@ Funzioni disponibili:
 - dashboard con totale, budget, progresso e suggerimento di risparmio;
 - inserimento manuale e inserimento da frase naturale, ad esempio `cena 24,50`;
 - riconoscimento locale di importo e categoria tramite regole;
-- importazione di fogli `.xlsx` e file `.csv`;
+- importazione di file `.xlsx`, `.xlsm` e `.csv`, anche quando il provider Android non restituisce l'estensione;
 - filtro per mese e categoria;
 - elenco movimenti con eliminazione;
 - report con grafico a ciambella, percentuali, media mensile, media giornaliera e spesa massima;
@@ -46,7 +46,7 @@ Funzioni disponibili:
 - Android SDK Platform-Tools;
 - connessione Internet al primo build per scaricare Gradle e dipendenze.
 
-Il progetto usa `compileSdk = 35`, `targetSdk = 35`, `minSdk = 26` e il Gradle Wrapper 9.3.0. Il file `local.properties` contiene il percorso SDK della macchina e non viene versionato.
+Il progetto usa `compileSdk = 35`, `targetSdk = 35`, `minSdk = 26`, Android Gradle Plugin 9.4.1, Kotlin 2.2.10 e il Gradle Wrapper 9.6.0. Il file `local.properties` contiene il percorso SDK della macchina e non viene versionato.
 
 ## Avvio in Android Studio
 
@@ -98,8 +98,8 @@ Sono presenti test JVM per il parser XLSX/CSV; `lint`, test e compilazione sono 
 │       ├── AndroidManifest.xml
 │       ├── java/it/fm/spese/MainActivity.kt
 │       └── res/values/styles.xml
+├── docs/
 ├── tools/import_sheet.py
-├── Foglio spese.xlsx
 ├── build.gradle.kts
 ├── settings.gradle.kts
 └── gradlew
@@ -128,6 +128,7 @@ Lo script usa solo la libreria standard Python e genera `tools/spese_importate.c
 
 ## Documentazione tecnica
 
+- [Funzionalità](docs/FUNZIONALITA.md)
 - [Architettura e stato](docs/ARCHITETTURA.md)
 - [Formato e importazione dati](docs/IMPORTAZIONE.md)
 

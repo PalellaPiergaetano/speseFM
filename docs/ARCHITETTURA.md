@@ -13,11 +13,11 @@ MainActivity
               ├── Movimenti
               ├── Reports
               ├── AddExpenseDialog
-              ├── XlsSheetImporter
+              ├── XlsSheetImporter (XLSX/CSV)
               └── SharedPreferences (expense_store)
 ```
 
-La logica è oggi concentrata in `app/src/main/java/it/fm/spese/MainActivity.kt`. Questa scelta mantiene piccolo l’MVP, ma aumenta la dimensione del file e rende il codice meno adatto a test isolati.
+La logica è oggi concentrata in `app/src/main/java/it/fm/spese/MainActivity.kt`. Questa scelta mantiene piccolo l’MVP, ma aumenta la dimensione del file. I parser hanno test JVM in `app/src/test/java/it/fm/spese/ImporterTest.kt`.
 
 ## Modello dati
 
@@ -71,6 +71,6 @@ Per trasformare l’MVP in una versione più robusta:
 3. aggiungere identificativo, data completa, nota e valuta al movimento;
 4. rendere il budget dipendente dal mese;
 5. cifrare il database o usare storage cifrato per dati finanziari;
-6. aggiungere test per parser importazione, aggregazioni e persistenza;
+6. aggiungere test per aggregazioni, persistenza e casi di errore UI;
 7. aggiungere backup/import con schema versionato;
 8. valutare sincronizzazione cloud solo dopo aver definito autenticazione e modello privacy.
