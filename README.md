@@ -27,7 +27,7 @@ Funzioni disponibili:
 - dashboard con totale, budget, progresso e suggerimento di risparmio;
 - inserimento manuale e inserimento da frase naturale, ad esempio `cena 24,50`;
 - riconoscimento locale di importo e categoria tramite regole;
-- importazione di file `.xlsx`, `.xlsm` e `.csv`, anche quando il provider Android non restituisce l'estensione;
+- importazione di file `.xlsx`, `.xlsm` e `.csv`, con rilevamento del formato e del delimitatore anche quando il provider Android non restituisce l'estensione;
 - filtro per mese e categoria;
 - elenco movimenti con eliminazione;
 - report con grafico a ciambella, percentuali, media mensile, media giornaliera e spesa massima;

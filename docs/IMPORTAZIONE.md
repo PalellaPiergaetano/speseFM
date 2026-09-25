@@ -27,6 +27,16 @@ Il parser `.xlsx` legge direttamente il formato OpenXML senza dipendenze Excel s
 
 Il template originale contiene fogli mensili come `settembre 26`, `agosto 26` e `luglio 24`. Le intestazioni vengono normalizzate in categorie dell’app.
 
+## Formati CSV riconosciuti
+
+Il parser rileva automaticamente il delimitatore tra virgola, punto e virgola e tabulazione, ignorando i delimitatori presenti dentro campi quotati. Dopo il parsing prova questi tracciati, in ordine:
+
+1. **Backup dell'app**: riconosce le colonne tramite intestazioni come `Mese`, `Descrizione`, `Categoria` e `Importo`, anche se l'ordine cambia.
+2. **CSV intermedio FM**: usa le colonne `mese`, `riga`, `valori` prodotte dallo script Python.
+3. **CSV generico**: cerca il primo importo valido e una descrizione testuale, quindi assegna la categoria tramite le regole del parser locale.
+
+Le righe senza importo positivo vengono ignorate. Se nessun tracciato produce movimenti validi, l'app mostra un messaggio e non modifica i dati già presenti.
+
 ## CSV intermedio
 
 Lo script `tools/import_sheet.py` usa solo la libreria standard Python e crea questo schema:
@@ -72,4 +82,5 @@ Quando sono presenti sia punto sia virgola, l’ultimo separatore viene trattato
 - file Excel con layout diverso possono importare zero movimenti o categorie errate;
 - l’importazione aggiunge i movimenti a quelli esistenti e non deduplica;
 - il CSV esportato dall’app è un backup semplice e non è lo stesso CSV intermedio accettato dal parser;
+- i CSV generici senza mese usano `settembre 26` come mese predefinito;
 - non viene salvata una data giornaliera, ma il nome del mese del foglio.
