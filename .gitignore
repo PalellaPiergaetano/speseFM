@@ -2,9 +2,11 @@
 .DS_Store
 local.properties
 .idea/
+.vscode/
 *.iml
 build/
 app/build/
 .venv/
 __pycache__/
 tools/spese_importate.csv
+/*.xlsx
