@@ -20,6 +20,14 @@ Tutto resta sul tuo dispositivo: i tuoi dati finanziari rimangono privati, dispo
 
 Il repository contiene un MVP funzionante in Kotlin e Jetpack Compose. Il flusso attuale è pensato per un singolo dispositivo: i dati vengono salvati localmente e non vengono inviati a un server.
 
+### Release beta
+
+La beta corrente è `1.0-beta01` (`versionCode 2`). L’APK è disponibile nel file `Spese_FM_Beta_v1.0.apk` nella root del repository. Per installarlo su un dispositivo con debug USB attivo:
+
+```bash
+adb install -r Spese_FM_Beta_v1.0.apk
+```
+
 Funzioni disponibili:
 
 - onboarding iniziale con guida alle funzioni;

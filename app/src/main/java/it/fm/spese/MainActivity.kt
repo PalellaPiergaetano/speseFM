@@ -7,6 +7,7 @@ import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
@@ -26,6 +27,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -73,6 +76,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -322,7 +326,7 @@ private fun saveBudget(context: Context, budget: Double?) {
 }
 
 private fun loadPrivacyMode(context: Context): Boolean {
-    return context.getSharedPreferences(ExpenseStore, 0).getBoolean("privacy_mode", false)
+    return context.getSharedPreferences(ExpenseStore, 0).getBoolean("privacy_mode", true)
 }
 
 private fun savePrivacyMode(context: Context, enabled: Boolean) {
@@ -356,16 +360,50 @@ private fun exportExpensesToCsv(context: Context, uri: Uri, expenses: List<Expen
 
 class MainActivity : FragmentActivity() {
 
+    private lateinit var importLauncher: ActivityResultLauncher<Array<String>>
+    private lateinit var exportLauncher: ActivityResultLauncher<String>
+
+    private var onImportResult: ((Uri?) -> Unit)? = null
+    private var onExportResult: ((Uri?) -> Unit)? = null
+
+    override fun onResume() {
+        super.onResume()
+        savePrivacyMode(this, true)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        importLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            onImportResult?.invoke(uri)
+        }
+        
+        exportLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+            onExportResult?.invoke(uri)
+        }
+        
         setContent {
-            SpeseAppWithSecurity(activity = this)
+            SpeseAppWithSecurity(
+                activity = this,
+                launchImport = { callback ->
+                    onImportResult = callback
+                    importLauncher.launch(arrayOf("*/*"))
+                },
+                launchExport = { filename, callback ->
+                    onExportResult = callback
+                    exportLauncher.launch(filename)
+                }
+            )
         }
     }
 }
 
 @Composable
-private fun SpeseAppWithSecurity(activity: FragmentActivity) {
+private fun SpeseAppWithSecurity(
+    activity: FragmentActivity,
+    launchImport: (((Uri?) -> Unit) -> Unit),
+    launchExport: ((String, (Uri?) -> Unit) -> Unit)
+) {
     val isDarkTheme = isSystemInDarkTheme()
     var isUnlocked by remember { mutableStateOf(false) }
 
@@ -390,7 +428,9 @@ private fun SpeseAppWithSecurity(activity: FragmentActivity) {
         )
     } else {
         SpeseApp(
-            onLockClick = { isUnlocked = false }
+            onLockClick = { isUnlocked = false },
+            launchImport = launchImport,
+            launchExport = launchExport
         )
     }
 }
@@ -519,7 +559,11 @@ private fun SecurityLockOverlay(
 }
 
 @Composable
-private fun SpeseApp(onLockClick: () -> Unit) {
+private fun SpeseApp(
+    onLockClick: () -> Unit,
+    launchImport: (((Uri?) -> Unit) -> Unit),
+    launchExport: ((String, (Uri?) -> Unit) -> Unit)
+) {
     val context = LocalContext.current
     val isDarkTheme = isSystemInDarkTheme()
 
@@ -559,35 +603,6 @@ private fun SpeseApp(onLockClick: () -> Unit) {
 
     val total = activeMonthExpenses.sumOf { it.amount }
 
-    val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri ->
-        if (uri != null) {
-            val imported = XlsSheetImporter.importFromUri(context, uri)
-            if (imported.isNotEmpty()) {
-                expenses = imported + expenses
-                saveExpenses(context, expenses)
-                selectedMonthFilter = imported.firstOrNull()?.month ?: selectedMonthFilter
-                Toast.makeText(context, "Importati con successo ${imported.size} movimenti!", Toast.LENGTH_LONG).show()
-            } else {
-                Toast.makeText(context, "Nessun movimento valido trovato nel file.", Toast.LENGTH_LONG).show()
-            }
-        }
-    }
-
-    val csvExportLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("text/csv")
-    ) { uri ->
-        if (uri != null) {
-            val ok = exportExpensesToCsv(context, uri, expenses)
-            if (ok) {
-                Toast.makeText(context, "File CSV esportato con successo!", Toast.LENGTH_LONG).show()
-            } else {
-                Toast.makeText(context, "Errore durante l'esportazione.", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
     MaterialTheme {
         if (showTutorial) {
             OnboardingTutorial(
@@ -609,7 +624,13 @@ private fun SpeseApp(onLockClick: () -> Unit) {
                             shape = CircleShape,
                             containerColor = Terracotta,
                             contentColor = Color.White,
-                            modifier = Modifier.size(64.dp).shadow(12.dp, CircleShape, spotColor = Terracotta)
+                            elevation = FloatingActionButtonDefaults.elevation(
+                                defaultElevation = 8.dp,
+                                pressedElevation = 12.dp
+                            ),
+                            modifier = Modifier
+                                .size(62.dp)
+                                .shadow(12.dp, CircleShape, spotColor = Terracotta)
                         ) {
                             Icon(Icons.Default.Add, contentDescription = "Aggiungi spesa", modifier = Modifier.size(30.dp))
                         }
@@ -618,15 +639,16 @@ private fun SpeseApp(onLockClick: () -> Unit) {
                         Surface(
                             shadowElevation = 16.dp,
                             color = cardBgColor,
-                            shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)
+                            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
                         ) {
                             NavigationBar(
                                 containerColor = cardBgColor,
                                 tonalElevation = 0.dp,
-                                modifier = Modifier.height(84.dp)
+                                windowInsets = WindowInsets.navigationBars,
+                                modifier = Modifier.height(82.dp)
                             ) {
                                 listOf(
-                                    "Oggi" to Icons.Default.Home,
+                                    "Home" to Icons.Default.Home,
                                     "Movimenti" to Icons.AutoMirrored.Filled.ReceiptLong,
                                     "Report" to Icons.Default.BarChart
                                 ).forEachIndexed { index, item ->
@@ -635,32 +657,26 @@ private fun SpeseApp(onLockClick: () -> Unit) {
                                         selected = selected,
                                         onClick = { selectedTab = index },
                                         icon = {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(42.dp)
-                                                    .background(
-                                                        if (selected) Terracotta.copy(alpha = 0.18f) else Color.Transparent,
-                                                        CircleShape
-                                                    ),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Icon(
-                                                    item.second,
-                                                    contentDescription = item.first,
-                                                    tint = if (selected) Terracotta else subTextColor,
-                                                    modifier = Modifier.size(22.dp)
-                                                )
-                                            }
+                                            Icon(
+                                                imageVector = item.second,
+                                                contentDescription = item.first,
+                                                modifier = Modifier.size(24.dp)
+                                            )
                                         },
                                         label = {
                                             Text(
-                                                item.first,
+                                                text = item.first,
                                                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                                                color = if (selected) Terracotta else subTextColor,
                                                 fontSize = 12.sp
                                             )
                                         },
-                                        colors = NavigationBarItemDefaults.colors(indicatorColor = Color.Transparent)
+                                        colors = NavigationBarItemDefaults.colors(
+                                            selectedIconColor = Terracotta,
+                                            selectedTextColor = Terracotta,
+                                            indicatorColor = Terracotta.copy(alpha = 0.16f),
+                                            unselectedIconColor = subTextColor,
+                                            unselectedTextColor = subTextColor
+                                        )
                                     )
                                 }
                             }
@@ -689,8 +705,33 @@ private fun SpeseApp(onLockClick: () -> Unit) {
                                 selectedCategoryFilter = cat
                                 selectedTab = 1
                             },
-                            onImportClick = { filePickerLauncher.launch("*/*") },
-                            onExportClick = { csvExportLauncher.launch("spese_backup.csv") },
+                            onImportClick = {
+                                launchImport { uri ->
+                                    if (uri != null) {
+                                        val imported = XlsSheetImporter.importFromUri(context, uri)
+                                        if (imported.isNotEmpty()) {
+                                            expenses = imported + expenses
+                                            saveExpenses(context, expenses)
+                                            selectedMonthFilter = imported.firstOrNull()?.month ?: selectedMonthFilter
+                                            Toast.makeText(context, "Importati con successo ${imported.size} movimenti!", Toast.LENGTH_LONG).show()
+                                        } else {
+                                            Toast.makeText(context, "Nessun movimento valido trovato nel file.", Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                }
+                            },
+                            onExportClick = {
+                                launchExport("spese_backup.csv") { uri ->
+                                    if (uri != null) {
+                                        val ok = exportExpensesToCsv(context, uri, expenses)
+                                        if (ok) {
+                                            Toast.makeText(context, "File CSV esportato con successo!", Toast.LENGTH_LONG).show()
+                                        } else {
+                                            Toast.makeText(context, "Errore durante l'esportazione.", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }
+                            },
                             onClearAllClick = { showClearConfirmDialog = true },
                             onSetBudgetClick = { showBudgetDialog = true },
                             onDeleteExpense = { exp ->
@@ -836,31 +877,31 @@ private fun OnboardingTutorial(
     val stepData = listOf(
         TutorialStep(
             title = "Benvenuto in Spese FM",
-            description = "Piattaforma moderna, minimale e circolare per tracciare le tue uscite quotidiane e mantenere il controllo del tuo budget.",
+            description = "Piattaforma moderna e circolare per gestire le tue uscite. Per la tua riservatezza, la Modalità Privacy è attiva di default al primo avvio.",
             icon = Icons.Default.AccountBalanceWallet,
             color = Terracotta
         ),
         TutorialStep(
-            title = "Importazione Fogli Excel & CSV",
-            description = "Carica istantaneamente i tuoi file .xlsx o .csv con riconoscimento automatico di tabelle, mesi, categorie e note su 'Altro'.",
-            icon = Icons.Default.FileUpload,
-            color = Sage
-        ),
-        TutorialStep(
-            title = "Modalità Privacy Stile Bancario",
-            description = "Nascondi gli importi sensibili con un solo tocco come nelle principali app bancarie quando ti trovi in pubblico.",
+            title = "Modalità Privacy Protetta",
+            description = "Le cifre sono nascoste (•••• €). Usa il pulsante ben visibile 'Nascosto / Visibile' in alto a destra nella schermata principale per mostrare o nascondere gli importi.",
             icon = Icons.Default.VisibilityOff,
             color = Ochre
         ),
         TutorialStep(
-            title = "Sicurezza con Impronta Digitale",
-            description = "I tuoi dati finanziari sono memorizzati localmente e protetti dall'autenticazione biometrica del tuo telefono.",
+            title = "Importazione Excel e CSV",
+            description = "Importa al volo i tuoi file .xlsx o .csv con rilevamento automatico delle colonne, delle note e dei formati bancari.",
+            icon = Icons.Default.FileUpload,
+            color = Sage
+        ),
+        TutorialStep(
+            title = "Sicurezza Biometrica",
+            description = "I tuoi dati finanziari restano al 100% protetti sul tuo dispositivo, tutelati dall'impronta digitale o riconoscimento facciale.",
             icon = Icons.Default.Fingerprint,
             color = Violet
         ),
         TutorialStep(
-            title = "Report & Statistiche per Anno",
-            description = "Visualizza il grafico a ciambella per categorie, imposta un budget mensile e confronta le spese medie anno per anno.",
+            title = "Report & Budget Mensile",
+            description = "Analizza i grafici a ciambella per categorie, imposta il tuo tetto di spesa mensile e consulta le medie storiche.",
             icon = Icons.Default.BarChart,
             color = Rose
         )
@@ -1133,7 +1174,7 @@ private fun Dashboard(
                     )
                 }
                 Spacer(Modifier.height(2.dp))
-                Text("Il tuo mese", color = textColor, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+                Text("Panoramica Spese", color = textColor, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
             }
         }
 
@@ -1168,7 +1209,7 @@ private fun Dashboard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Ultime spese", color = textColor, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text("Ultimi Movimenti", color = textColor, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Surface(
                     color = if (isDark) Color(0xFF282522) else Color(0xFFEBE5DA),
                     shape = CircleShape,
@@ -1234,7 +1275,7 @@ private fun QuickActionsStrip(
     val subTextColor = if (isDark) Color(0xFFA0B2A3) else Color(0xFF5B7B68)
 
     Column {
-        Text("Strumenti e Sicurezza", color = textColor, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text("Gestione & Sicurezza", color = textColor, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(10.dp))
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -1620,12 +1661,13 @@ private fun CategoryQuickStrip(expenses: List<Expense>, isDark: Boolean, isPriva
                         }
                         Spacer(Modifier.width(10.dp))
                         Column {
-                            Text(category, color = textColor, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Text(category, color = textColor, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(
                                 formatAmount(totalForCat, isPrivacyMode),
                                 color = subTextColor,
                                 fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1
                             )
                         }
                     }
@@ -1880,13 +1922,16 @@ private fun ExpenseRow(expense: Expense, isDark: Boolean, isPrivacyMode: Boolean
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Surface(
                         color = meta.color.copy(alpha = 0.12f),
-                        shape = CircleShape
+                        shape = CircleShape,
+                        modifier = Modifier.weight(1f, fill = false)
                     ) {
                         Text(
                             text = expense.category,
                             color = meta.color,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                         )
                     }
@@ -1896,7 +1941,9 @@ private fun ExpenseRow(expense: Expense, isDark: Boolean, isPrivacyMode: Boolean
                             text = "• ${expense.month}",
                             color = Sage,
                             fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -1906,7 +1953,8 @@ private fun ExpenseRow(expense: Expense, isDark: Boolean, isPrivacyMode: Boolean
                 text = formatAmount(expense.amount, isPrivacyMode),
                 color = textColor,
                 fontWeight = FontWeight.Bold,
-                fontSize = 16.sp
+                fontSize = 16.sp,
+                maxLines = 1
             )
 
             Spacer(Modifier.width(8.dp))
@@ -2241,9 +2289,17 @@ private fun Reports(
                                         Icon(meta.icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                                     }
                                     Spacer(Modifier.width(10.dp))
-                                    Text(category, color = textColor, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                    Text(
+                                        category,
+                                        color = textColor,
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 14.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f, fill = false)
+                                    )
 
-                                    Spacer(Modifier.weight(1f))
+                                    Spacer(Modifier.width(8.dp))
 
                                     Surface(
                                         color = meta.color.copy(alpha = 0.15f),
@@ -2873,63 +2929,163 @@ object XlsSheetImporter {
     }
 
     private fun parseCsvStream(inputStream: InputStream): List<Expense> {
-        val expenses = mutableListOf<Expense>()
-        val records = inputStream.bufferedReader().useLines { lines ->
-            lines.map(::parseCsvLine).filter { it.any(String::isNotBlank) }.toList()
+        val lines = inputStream.bufferedReader(Charsets.UTF_8).useLines { sequence -> 
+            sequence.filter { it.isNotBlank() }.toList() 
         }
+        if (lines.isEmpty()) return emptyList()
+
+        val delimiter = detectDelimiter(lines)
+        val records = lines.map { parseCsvLine(it, delimiter) }.filter { it.any(String::isNotBlank) }
         if (records.isEmpty()) return emptyList()
 
+        val expenses = mutableListOf<Expense>()
+
+        // 1. App Backup Format (Mese, Descrizione, Categoria, Importo)
         val header = records.first().map { it.trim().removePrefix("\uFEFF").lowercase(Locale.ITALY) }
-        if (header.any { it == "importo" }) {
-            return records.drop(1).mapNotNull { record ->
-                if (record.size < 4) return@mapNotNull null
-                val amount = parseAmount(record[3]) ?: return@mapNotNull null
-                if (amount <= 0) return@mapNotNull null
-                Expense(
-                    title = record[1].trim().ifBlank { "Spesa" },
-                    category = record[2].trim().ifBlank { "Altro" },
-                    amount = amount,
-                    month = record[0].trim().ifBlank { "settembre 26" }
+        var monthCol = -1
+        var titleCol = -1
+        var categoryCol = -1
+        var amountCol = -1
+
+        header.forEachIndexed { idx, colName ->
+            if (colName.contains("mese") || colName.contains("data") || colName.contains("periodo")) monthCol = idx
+            else if (colName.contains("descriz") || colName.contains("causale") || colName.contains("nota") || colName.contains("titolo")) titleCol = idx
+            else if (colName.contains("categor")) categoryCol = idx
+            else if (colName.contains("importo") || colName.contains("spesa") || colName.contains("totale") || colName.contains("valore") || colName.contains("euro")) amountCol = idx
+        }
+
+        if (amountCol != -1) {
+            for (record in records.drop(1)) {
+                if (record.isEmpty() || record.all { it.isBlank() }) continue
+                
+                var amount: Double? = null
+                if (amountCol < record.size) {
+                    amount = parseAmount(record[amountCol])
+                }
+
+                if (amount == null || amount <= 0) {
+                    for (cell in record) {
+                        val candidate = parseAmount(cell)
+                        if (candidate != null && candidate > 0) {
+                            amount = candidate
+                            break
+                        }
+                    }
+                }
+
+                if (amount != null && amount > 0) {
+                    var title = if (titleCol != -1 && titleCol < record.size) record[titleCol].trim() else ""
+                    if (title.isBlank()) {
+                        title = record.firstOrNull { parseAmount(it) == null && it.length > 2 }?.trim() ?: "Spesa"
+                    }
+                    
+                    var category = if (categoryCol != -1 && categoryCol < record.size) record[categoryCol].trim() else ""
+                    if (category.isBlank()) {
+                        category = "Altro"
+                    }
+
+                    var month = if (monthCol != -1 && monthCol < record.size) record[monthCol].trim() else "settembre 26"
+                    if (month.isBlank()) month = "settembre 26"
+
+                    expenses.add(Expense(title = title.ifBlank { "Spesa" }, category = category.ifBlank { "Altro" }, amount = amount, month = month))
+                }
+            }
+            if (expenses.isNotEmpty()) return expenses
+        }
+
+        // 2. Formato Intermedio FM (se le righe hanno il separatore interno '|')
+        val isIntermediateFm = records.any { parts ->
+            parts.size >= 3 && parts[1].trim().toIntOrNull() != null && parts[2].contains("|")
+        }
+
+        if (isIntermediateFm) {
+            val categoryHeaderMap = mutableMapOf<Int, String>()
+            for (parts in records) {
+                if (parts.size < 3) continue
+
+                val sheetName = parts[0].trim().ifBlank { "settembre 26" }
+                val rowNum = parts[1].trim().toIntOrNull() ?: continue
+                val values = parts[2].split("|").map { it.trim() }
+
+                if (rowNum == 2) {
+                    categoryHeaderMap.clear()
+                    values.take(6).forEachIndexed { colIndex, colName ->
+                        if (colName.isNotBlank() && !colName.uppercase(Locale.ITALY).startsWith("TOTALE")) {
+                            categoryHeaderMap[colIndex] = mapColumnToCategory(colName)
+                        }
+                    }
+                } else if (rowNum in 3..39) {
+                    val note = if (values.size > 7) values[7] else ""
+                    values.take(6).forEachIndexed { colIndex, valStr ->
+                        val category = categoryHeaderMap[colIndex]
+                        val amount = parseAmount(valStr)
+                        if (category != null && amount != null && amount > 0) {
+                            val title = if (colIndex == 5 && note.isNotBlank()) note else category
+                            expenses.add(Expense(title = title, category = category, amount = amount, month = sheetName))
+                        }
+                    }
+                }
+            }
+            if (expenses.isNotEmpty()) return expenses
+        }
+
+        // 3. Formato Generico Sconosciuto (fallback: analizziamo riga per riga per trovare l'importo e la stringa descrittiva)
+        val dataRows = if (amountCol != -1 || titleCol != -1) records.drop(1) else records
+        for (record in dataRows) {
+            if (record.isEmpty() || record.all { it.isBlank() }) continue
+
+            var amount: Double? = null
+            var title = ""
+            for (cell in record) {
+                val candidate = parseAmount(cell)
+                if (candidate != null && candidate > 0 && amount == null) {
+                    amount = candidate
+                } else if (parseAmount(cell) == null && cell.length > 2 && title.isBlank()) {
+                    title = cell.trim()
+                }
+            }
+
+            if (amount != null && amount > 0) {
+                val parsedAi = AiExpenseParser.parseText(title)
+                expenses.add(
+                    Expense(
+                        title = parsedAi.title.ifBlank { title.ifBlank { "Spesa" } },
+                        category = parsedAi.category,
+                        amount = amount,
+                        month = "settembre 26"
+                    )
                 )
             }
         }
 
-        val categoryHeaderMap = mutableMapOf<Int, String>()
+        return expenses
+    }
 
-        for (parts in records.drop(1)) {
-            if (parts.size < 3) continue
-
-            val sheetName = parts[0].trim().ifBlank { "settembre 26" }
-            val rowNum = parts[1].trim().toIntOrNull() ?: continue
-            val values = parts[2].split("|").map { it.trim() }
-
-            if (rowNum == 2) {
-                categoryHeaderMap.clear()
-                values.take(6).forEachIndexed { colIndex, colName ->
-                    if (colName.isNotBlank() && !colName.startsWith("TOTALE")) {
-                        categoryHeaderMap[colIndex] = mapColumnToCategory(colName)
-                    }
-                }
-            } else if (rowNum in 3..39) {
-                val note = if (values.size > 7) values[7] else ""
-                values.take(6).forEachIndexed { colIndex, valStr ->
-                    val category = categoryHeaderMap[colIndex]
-                    val amount = parseAmount(valStr)
-                    if (category != null && amount != null && amount > 0) {
-                        val title = if (colIndex == 5 && note.isNotBlank()) {
-                            note
-                        } else {
-                            category
-                        }
-                        expenses.add(Expense(title, category, amount, month = sheetName.ifBlank { "settembre 26" }))
+    private fun detectDelimiter(lines: List<String>): Char {
+        var comma = 0
+        var semicolon = 0
+        var tab = 0
+        for (line in lines.take(5)) {
+            var inQuotes = false
+            for (c in line) {
+                if (c == '"') inQuotes = !inQuotes
+                if (!inQuotes) {
+                    when (c) {
+                        ',' -> comma++
+                        ';' -> semicolon++
+                        '\t' -> tab++
                     }
                 }
             }
         }
-        return expenses
+        return when {
+            semicolon > comma && semicolon > tab -> ';'
+            tab > comma && tab > semicolon -> '\t'
+            else -> ','
+        }
     }
 
-    private fun parseCsvLine(line: String): List<String> {
+    private fun parseCsvLine(line: String, delimiter: Char = ','): List<String> {
         val fields = mutableListOf<String>()
         val field = StringBuilder()
         var quoted = false
@@ -2943,15 +3099,15 @@ object XlsSheetImporter {
                     index++
                 }
                 character == '"' -> quoted = !quoted
-                character == ',' && !quoted -> {
-                    fields.add(field.toString())
+                character == delimiter && !quoted -> {
+                    fields.add(field.toString().trim())
                     field.clear()
                 }
                 else -> field.append(character)
             }
             index++
         }
-        fields.add(field.toString().trimEnd('\r'))
+        fields.add(field.toString().trim().trimEnd('\r'))
         return fields
     }
 
