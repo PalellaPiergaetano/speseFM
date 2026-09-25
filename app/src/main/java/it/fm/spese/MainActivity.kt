@@ -2834,18 +2834,29 @@ object XlsSheetImporter {
     internal fun parseCsvContentForTest(content: String): List<Expense> =
         parseCsvStream(content.byteInputStream())
 
+    internal fun parseFileBytesForTest(fileName: String, bytes: ByteArray): List<Expense> =
+        parseFileBytes(fileName, bytes)
+
     fun importFromUri(context: Context, uri: Uri): List<Expense> {
         val fileName = getFileName(context, uri).lowercase()
 
         return try {
-            if (fileName.endsWith(".csv")) {
-                context.contentResolver.openInputStream(uri)?.use { parseCsvStream(it) } ?: emptyList()
-            } else {
-                context.contentResolver.openInputStream(uri)?.use { parseXlsxStream(it) } ?: emptyList()
-            }
+            context.contentResolver.openInputStream(uri)?.use { parseFileBytes(fileName, it.readBytes()) } ?: emptyList()
         } catch (e: Exception) {
             e.printStackTrace()
             emptyList()
+        }
+    }
+
+    private fun parseFileBytes(fileName: String, bytes: ByteArray): List<Expense> {
+        if (bytes.isEmpty()) return emptyList()
+        if (fileName.endsWith(".xls") && !fileName.endsWith(".xlsx")) return emptyList()
+
+        val isOpenXml = bytes.size >= 2 && bytes[0] == 'P'.code.toByte() && bytes[1] == 'K'.code.toByte()
+        return if (fileName.endsWith(".xlsx") || fileName.endsWith(".xlsm") || isOpenXml) {
+            parseXlsxStream(bytes.inputStream())
+        } else {
+            parseCsvStream(bytes.inputStream())
         }
     }
 

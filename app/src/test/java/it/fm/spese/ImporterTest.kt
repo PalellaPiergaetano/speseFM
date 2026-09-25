@@ -35,6 +35,15 @@ class ImporterTest {
         assertTrue(backup.single().title.contains("Cena, amici"))
     }
 
+    @Test
+    fun detectsCsvWhenDocumentProviderHasNoExtension() {
+        val csv = "Mese,Descrizione,Categoria,Importo\nsettembre 26,Spesa,Spesa,\"12,50\""
+        val expenses = XlsSheetImporter.parseFileBytesForTest("file", csv.toByteArray())
+
+        assertEquals(1, expenses.size)
+        assertEquals(12.5, expenses.single().amount, 0.001)
+    }
+
     private fun minimalWorkbook(): ByteArray {
         val output = ByteArrayOutputStream()
         ZipOutputStream(output).use { zip ->
