@@ -1,21 +1,122 @@
-# Spese
+# Spese FM
 
-App Android in Kotlin e Jetpack Compose per sostituire il foglio spese mensile.
+Applicazione Android locale per sostituire il foglio spese mensile con inserimento rapido, importazione Excel/CSV, filtri, report, budget e suggerimenti sulle categorie più costose.
 
-## Funzioni MVP
+## Stato del progetto
 
-- Dashboard del mese con totale e ultimi movimenti.
-- Inserimento rapido di una spesa dal pulsante `+`.
-- Report per categoria con grafico a barre.
-- Suggerimento automatico sulla categoria con maggiore impatto.
-- Script Python per estrarre il workbook originale in CSV.
+Il repository contiene un MVP funzionante in Kotlin e Jetpack Compose. Il flusso attuale è pensato per un singolo dispositivo: i dati vengono salvati localmente e non vengono inviati a un server.
 
-## Ambiente Python
+Funzioni disponibili:
 
-Il venv del progetto e `.venv` e va usato esclusivamente per gli strumenti Python:
+- onboarding iniziale con guida alle funzioni;
+- sblocco con biometria o credenziale del dispositivo;
+- dashboard con totale, budget, progresso e suggerimento di risparmio;
+- inserimento manuale e inserimento da frase naturale, ad esempio `cena 24,50`;
+- riconoscimento locale di importo e categoria tramite regole;
+- importazione di fogli `.xlsx` e file `.csv`;
+- filtro per mese e categoria;
+- elenco movimenti con eliminazione;
+- report con grafico a ciambella, percentuali, media mensile, media giornaliera e spesa massima;
+- confronto aggregato per anno;
+- modalità privacy per nascondere gli importi;
+- esportazione dei movimenti in CSV;
+- cancellazione completa dei dati dal dispositivo.
+
+## Requisiti
+
+- macOS, Linux o Windows;
+- Android Studio recente;
+- JDK 21;
+- Android SDK Platform 35;
+- Android SDK Build Tools 35.0.0;
+- Android SDK Platform-Tools;
+- connessione Internet al primo build per scaricare Gradle e dipendenze.
+
+Il progetto usa `compileSdk = 35`, `targetSdk = 35`, `minSdk = 26` e il Gradle Wrapper 9.3.0. Il file `local.properties` contiene il percorso SDK della macchina e non viene versionato.
+
+## Avvio in Android Studio
+
+1. Clona il repository e apri la cartella in Android Studio.
+2. Attendi la sincronizzazione Gradle.
+3. Se richiesto, seleziona un JDK 21 in **Settings > Build, Execution, Deployment > Build Tools > Gradle**.
+4. Seleziona un emulatore o collega un dispositivo con il debug USB attivo.
+5. Premi **Run** sul modulo `app`.
+
+Il primo avvio mostra l’onboarding e richiede l’autenticazione biometrica. Su un emulatore senza biometria configurata è possibile usare la credenziale del dispositivo, se impostata.
+
+## Build da terminale
+
+Dal root del progetto:
 
 ```bash
+./gradlew assembleDebug
+```
+
+APK generato:
+
+```text
+app/build/outputs/apk/debug/app-debug.apk
+```
+
+Per installare su un dispositivo collegato:
+
+```bash
+./gradlew installDebug
+```
+
+Controlli utili:
+
+```bash
+./gradlew :app:compileDebugKotlin
+./gradlew lint
+./gradlew test
+```
+
+Al momento il progetto non contiene test automatici applicativi; `lint` e la compilazione sono i controlli disponibili.
+
+## Struttura
+
+```text
+.
+├── app/
+│   ├── build.gradle.kts
+│   └── src/main/
+│       ├── AndroidManifest.xml
+│       ├── java/it/fm/spese/MainActivity.kt
+│       └── res/values/styles.xml
+├── tools/import_sheet.py
+├── Foglio spese.xlsx
+├── build.gradle.kts
+├── settings.gradle.kts
+└── gradlew
+```
+
+`MainActivity.kt` contiene attualmente UI, stato locale, persistenza, import/export, parser delle frasi e grafici. Per una crescita ulteriore conviene separare questi ruoli in `data`, `domain` e `ui`.
+
+## Dati e privacy
+
+Le spese, il budget, la modalità privacy e lo stato dell’onboarding vengono salvati in `SharedPreferences` con la chiave `expense_store`. I dati restano sul dispositivo. La biometria protegge l’accesso all’interfaccia, ma l’MVP non usa ancora cifratura applicativa dedicata del contenuto salvato.
+
+Il backup CSV è creato dall’utente tramite il selettore file di Android. L’esportazione non è cifrata: trattare il file come dato finanziario sensibile.
+
+## Importazione
+
+L’app importa direttamente il workbook Excel originale riconoscendo i fogli mensili e le righe operative del template. È supportato anche il CSV intermedio prodotto dallo script Python. La specifica completa è in [docs/IMPORTAZIONE.md](docs/IMPORTAZIONE.md).
+
+Per generare il CSV dal workbook usando esclusivamente il venv del progetto:
+
+```bash
+python3 -m venv .venv       # solo la prima volta
 .venv/bin/python tools/import_sheet.py
 ```
 
-L'app Android viene aperta e compilata da Android Studio tramite il progetto Gradle nella cartella principale. Sul computer attuale non risultano Android SDK e Gradle nel PATH; serve configurarli in Android Studio per eseguire l'app su emulatore o dispositivo.
+Lo script usa solo la libreria standard Python e genera `tools/spese_importate.csv`, che è ignorato da Git.
+
+## Documentazione tecnica
+
+- [Architettura e stato](docs/ARCHITETTURA.md)
+- [Formato e importazione dati](docs/IMPORTAZIONE.md)
+
+## Repository
+
+Repository GitHub: <https://github.com/PalellaPiergaetano/speseFM>
