@@ -1,0 +1,10 @@
+.gradle/
+.DS_Store
+local.properties
+.idea/
+*.iml
+build/
+app/build/
+.venv/
+__pycache__/
+tools/spese_importate.csv

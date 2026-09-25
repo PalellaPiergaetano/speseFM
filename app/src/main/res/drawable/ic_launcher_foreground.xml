@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Outer Circular Ring Gauge -->
+    <path
+        android:strokeColor="#5B7B68"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:pathData="M 54,20 A 34,34 0 1,1 24,68" />
+
+    <path
+        android:strokeColor="#D95D39"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:pathData="M 24,68 A 34,34 0 0,1 54,20" />
+
+    <!-- Center Circular Wallet Surface -->
+    <path
+        android:fillColor="#D95D39"
+        android:pathData="M54,54m-22,0a22,22 0 1,0 44,0a22,22 0 1,0 -44,0" />
+
+    <!-- Euro Currency Motif -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M57,44.5 C52.5,44.5 49,48 49,54 C49,60 52.5,63.5 57,63.5 C59.5,63.5 61.5,62.5 62.5,61 L65,63 C63.2,65 60.2,66.5 57,66.5 C50.5,66.5 45.5,61 45.5,54 C45.5,47 50.5,41.5 57,41.5 C60.2,41.5 63.2,43 65,45 L62.5,47 C61.5,45.5 59.5,44.5 57,44.5 Z M44,52 h18 v2 h-18 Z M44,56 h18 v2 h-18 Z" />
+</vector>
