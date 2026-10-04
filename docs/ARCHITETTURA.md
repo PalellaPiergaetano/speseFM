@@ -28,7 +28,10 @@ data class Expense(
     val title: String,
     val category: String,
     val amount: Double,
-    val month: String = "settembre 26"
+  val month: String = "settembre 26",
+  val date: String = "",
+  val time: String = "",
+  val description: String = ""
 )
 ```
 
@@ -36,7 +39,7 @@ Le categorie standard sono `Spesa`, `Trasporti`, `Bar / Ristoranti / Uscite`, `M
 
 ## Persistenza
 
-La lista viene serializzata in una stringa con campi separati da tabulazione e righe separate da newline. Sono salvate anche queste impostazioni:
+La lista viene serializzata in una stringa con campi separati da tabulazione e righe separate da newline. Le righe storiche mantengono titolo, categoria, importo e mese; i nuovi campi data, ora e descrizione sono presenti nel modello e vengono usati dalla UI beta. Sono salvate anche queste impostazioni:
 
 - `monthly_budget`;
 - `privacy_mode`;

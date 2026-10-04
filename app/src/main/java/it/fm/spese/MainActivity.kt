@@ -42,6 +42,23 @@ import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsNone
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BarChart
@@ -133,11 +150,42 @@ private val Ochre = Color(0xFFD99B26)
 private val Rose = Color(0xFFC8527A)
 private val Violet = Color(0xFF6C5CE7)
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+data class PaymentReminder(
+    val title: String,
+    val amount: Double,
+    val dueDate: String,
+    val isRecurring: Boolean = false,
+    val recurrenceInterval: String? = null,
+    val maxPayments: Int? = null,
+    val paymentsMade: Int = 0
+)
+
+private fun todayDate(): String =
+    java.text.SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(java.util.Date())
+
 data class Expense(
     val title: String,
     val category: String,
     val amount: Double,
-    val month: String = "settembre 26"
+    val month: String = "settembre 26",
+    val date: String = todayDate(),
+    val time: String = "",
+    val description: String = ""
 )
 
 data class CategoryMeta(
@@ -282,6 +330,61 @@ object AiExpenseParser {
     }
 }
 
+
+private const val ReminderStore = "reminder_store"
+
+private fun loadPaymentReminders(context: Context): List<PaymentReminder> {
+    val prefs = context.getSharedPreferences(ReminderStore, 0)
+    val raw = prefs.getString("items", "") ?: ""
+    if (raw.isBlank()) return emptyList()
+    return raw.lines().mapNotNull { line ->
+        val parts = line.split("\t")
+        if (parts.size >= 3) {
+            val title = parts[0]
+            val amount = parseAmount(parts[1]) ?: return@mapNotNull null
+            val dueDate = parts[2]
+            val isRecurring = if (parts.size >= 4) parts[3].toBoolean() else false
+            val interval = if (parts.size >= 5 && parts[4] != "null") parts[4] else null
+            val maxP = if (parts.size >= 6) parts[5].toIntOrNull() else null
+            val made = if (parts.size >= 7) parts[6].toIntOrNull() ?: 0 else 0
+            PaymentReminder(title, amount, dueDate, isRecurring, interval, maxP, made)
+        } else null
+    }
+}
+
+private fun savePaymentReminders(context: Context, reminders: List<PaymentReminder>) {
+    val raw = reminders.joinToString("\n") { it.title + "	" + it.amount + "	" + it.dueDate + "	" + it.isRecurring + "	" + it.recurrenceInterval + "	" + it.maxPayments + "	" + it.paymentsMade }
+    context.getSharedPreferences(ReminderStore, 0).edit().putString("items", raw).apply()
+}
+
+
+
+fun importXlsToExpenses(context: Context, uri: Uri, onResult: (List<Expense>) -> Unit) {
+    try {
+        val imported = XlsSheetImporter.importFromUri(context, uri)
+        if (imported.isNotEmpty()) {
+            Toast.makeText(context, "Importati ${imported.size} movimenti con successo!", Toast.LENGTH_LONG).show()
+            onResult(imported)
+        } else {
+            Toast.makeText(context, "Nessun movimento trovato nel file.", Toast.LENGTH_LONG).show()
+            onResult(emptyList())
+        }
+    } catch (e: Exception) {
+        Toast.makeText(context, "Errore durante l'importazione", Toast.LENGTH_SHORT).show()
+        onResult(emptyList())
+    }
+}
+
+fun exportCsv(context: Context, uri: Uri, expenses: List<Expense>) {
+    val ok = exportExpensesToCsv(context, uri, expenses)
+    if (ok) {
+        Toast.makeText(context, "Backup CSV esportato con successo!", Toast.LENGTH_LONG).show()
+    } else {
+        Toast.makeText(context, "Errore durante l'esportazione CSV.", Toast.LENGTH_SHORT).show()
+    }
+}
+
+
 private const val ExpenseStore = "expense_store"
 
 private fun loadExpenses(context: Context): List<Expense> {
@@ -421,17 +524,33 @@ private fun SpeseAppWithSecurity(
         triggerBiometric()
     }
 
-    if (!isUnlocked) {
-        SecurityLockOverlay(
-            isDarkTheme = isDarkTheme,
-            onUnlockClick = { triggerBiometric() }
-        )
-    } else {
-        SpeseApp(
-            onLockClick = { isUnlocked = false },
-            launchImport = launchImport,
-            launchExport = launchExport
-        )
+    var currentLanguage by remember { mutableStateOf(loadAppLanguage(activity)) }
+    var showLanguageDialog by remember { mutableStateOf(false) }
+
+    androidx.compose.runtime.CompositionLocalProvider(LocalAppLanguage provides currentLanguage) {
+        if (showLanguageDialog) {
+            LanguageSettingsDialog(
+                currentLanguage = currentLanguage,
+                onLanguageSelected = { 
+                    currentLanguage = it
+                    saveAppLanguage(activity, it)
+                },
+                onDismiss = { showLanguageDialog = false }
+            )
+        }
+        if (!isUnlocked) {
+            SecurityLockOverlay(
+                isDarkTheme = isDarkTheme,
+                onUnlockClick = { triggerBiometric() }
+            )
+        } else {
+            SpeseApp(
+                onOpenLanguageDialog = { showLanguageDialog = true },
+                onLockClick = { isUnlocked = false },
+                launchImport = launchImport,
+                launchExport = launchExport
+            )
+        }
     }
 }
 
@@ -551,7 +670,7 @@ private fun SecurityLockOverlay(
                         modifier = Modifier.size(24.dp)
                     )
                     Spacer(Modifier.width(12.dp))
-                    Text("Sblocca con Impronta", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text(AppStrings.get(AppStrings.sblocca_con_impronta, LocalAppLanguage.current), fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -560,6 +679,7 @@ private fun SecurityLockOverlay(
 
 @Composable
 private fun SpeseApp(
+    onOpenLanguageDialog: () -> Unit,
     onLockClick: () -> Unit,
     launchImport: (((Uri?) -> Unit) -> Unit),
     launchExport: ((String, (Uri?) -> Unit) -> Unit)
@@ -580,6 +700,10 @@ private fun SpeseApp(
     var showAddDialog by remember { mutableStateOf(false) }
     var showBudgetDialog by remember { mutableStateOf(false) }
     var showClearConfirmDialog by remember { mutableStateOf(false) }
+    var reminders by remember { mutableStateOf(loadPaymentReminders(context)) }
+    var showSettings by remember { mutableStateOf(false) }
+    var selectedExpense by remember { mutableStateOf<Expense?>(null) }
+    var showRemindersScreen by remember { mutableStateOf(false) }
 
     var selectedCategoryFilter by remember { mutableStateOf<String?>(null) }
     var selectedMonthFilter by remember { mutableStateOf<String?>(null) }
@@ -616,6 +740,69 @@ private fun SpeseApp(
             Box(modifier = Modifier.fillMaxSize().background(paperColor)) {
                 BackgroundCircles(isDarkTheme)
 
+                if (selectedExpense != null) {
+                    ExpenseDetailScreen(
+                        expense = selectedExpense!!,
+                        isDark = isDarkTheme,
+                        onClose = { selectedExpense = null },
+                        onDelete = { 
+                            val e = selectedExpense!!
+                            expenses = expenses.filter { it != e }
+                            saveExpenses(context, expenses)
+                            selectedExpense = null
+                        }
+                    )
+                } else if (showRemindersScreen) {
+                    RemindersScreen(
+                        reminders = reminders,
+                        isDark = isDarkTheme,
+                        onAddReminder = { 
+                            reminders = reminders + it
+                            savePaymentReminders(context, reminders)
+                            Toast.makeText(context, AppStrings.get(AppStrings.promemoria_salvato, AppLanguage.ITALIAN), Toast.LENGTH_SHORT).show()
+                        },
+                        onDeleteReminder = { 
+                            reminders = reminders.filter { r -> r != it }
+                            savePaymentReminders(context, reminders)
+                        },
+                        onPayReminder = { reminder ->
+                            val newExp = Expense(title = reminder.title, category = "Fitto / Bollette / Casa", amount = reminder.amount, month = availableMonths.firstOrNull() ?: "settembre 26", date = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault()).format(java.util.Date()), time = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date()))
+                            expenses = expenses + newExp
+                            saveExpenses(context, expenses)
+                            
+                            reminders = if (!reminder.isRecurring || (reminder.maxPayments != null && reminder.paymentsMade + 1 >= reminder.maxPayments)) {
+                                reminders.filter { it != reminder }
+                            } else {
+                                reminders.map { r ->
+                                    if (r == reminder) {
+                                        r.copy(paymentsMade = r.paymentsMade + 1)
+                                    } else r
+                                }
+                            }
+                            savePaymentReminders(context, reminders)
+                            Toast.makeText(context, AppStrings.get(AppStrings.promemoria_salvato, AppLanguage.ITALIAN), Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier,
+                        onClose = { showRemindersScreen = false }
+                    )
+                } else if (showSettings) {
+                    SettingsScreen(
+                        isDark = isDarkTheme,
+                        isPrivacyMode = isPrivacyMode,
+                        onTogglePrivacy = { 
+                            isPrivacyMode = !isPrivacyMode
+                            savePrivacyMode(context, isPrivacyMode)
+                        },
+                        onLockClick = onLockClick,
+                        onImportClick = { launchImport { uri -> uri?.let { importXlsToExpenses(context, it) { newExp -> expenses = expenses + newExp; saveExpenses(context, expenses) } } } },
+                        onExportClick = { launchExport("Spese_FM_Backup_${System.currentTimeMillis()}.csv") { uri -> uri?.let { exportCsv(context, it, expenses) } } },
+                        onClearAllClick = { showClearConfirmDialog = true },
+                        onOpenTutorialClick = { showTutorial = true; showSettings = false },
+                        onLanguageClick = onOpenLanguageDialog,
+                        onRemindersClick = { showRemindersScreen = true; showSettings = false },
+                        onClose = { showSettings = false }
+                    )
+                } else {
                 Scaffold(
                     containerColor = Color.Transparent,
                     floatingActionButton = {
@@ -648,9 +835,9 @@ private fun SpeseApp(
                                 modifier = Modifier.height(82.dp)
                             ) {
                                 listOf(
-                                    "Home" to Icons.Default.Home,
-                                    "Movimenti" to Icons.AutoMirrored.Filled.ReceiptLong,
-                                    "Report" to Icons.Default.BarChart
+                                    AppStrings.get(AppStrings.panoramica_spese, LocalAppLanguage.current) to Icons.Default.Home,
+                                    AppStrings.get(AppStrings.movimenti, LocalAppLanguage.current) to Icons.AutoMirrored.Filled.ReceiptLong,
+                                    AppStrings.get(AppStrings.report_statistiche, LocalAppLanguage.current) to Icons.Default.BarChart
                                 ).forEachIndexed { index, item ->
                                     val selected = selectedTab == index
                                     NavigationBarItem(
@@ -739,6 +926,10 @@ private fun SpeseApp(
                                 saveExpenses(context, expenses)
                                 Toast.makeText(context, "Spesa eliminata", Toast.LENGTH_SHORT).show()
                             },
+                            reminders = reminders,
+                            onOpenSettingsClick = { showSettings = true },
+                            onOpenRemindersClick = { showRemindersScreen = true },
+                            onExpenseClick = { selectedExpense = it },
                             modifier = Modifier.padding(padding)
                         )
                         1 -> Movements(
@@ -755,6 +946,7 @@ private fun SpeseApp(
                                 saveExpenses(context, expenses)
                                 Toast.makeText(context, "Spesa eliminata", Toast.LENGTH_SHORT).show()
                             },
+                            onExpenseClick = { selectedExpense = it },
                             modifier = Modifier.padding(padding)
                         )
                         else -> Reports(
@@ -821,7 +1013,7 @@ private fun SpeseApp(
                         Icon(Icons.Default.DeleteForever, contentDescription = null, tint = Terracotta)
                     }
                     Spacer(Modifier.width(12.dp))
-                    Text("Cancella tutti i dati", color = textColor, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                    Text(AppStrings.get(AppStrings.cancella_tutti_i_dati, LocalAppLanguage.current), color = textColor, fontWeight = FontWeight.Bold, fontSize = 20.sp)
                 }
             },
             text = {
@@ -843,16 +1035,17 @@ private fun SpeseApp(
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(containerColor = Terracotta)
                 ) {
-                    Text("Cancella tutto", fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 8.dp))
+                    Text(AppStrings.get(AppStrings.cancella_tutto, LocalAppLanguage.current), fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 8.dp))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showClearConfirmDialog = false }, shape = CircleShape) {
-                    Text("Annulla", color = Sage)
+                    Text(AppStrings.get(AppStrings.annulla, LocalAppLanguage.current), color = Sage)
                 }
             }
         )
     }
+}
 }
 
 data class TutorialStep(
@@ -929,7 +1122,7 @@ private fun OnboardingTutorial(
 
             if (currentStep < totalSteps - 1) {
                 TextButton(onClick = onFinish, shape = CircleShape) {
-                    Text("Salta", color = subTextColor, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text(AppStrings.get(AppStrings.salta, LocalAppLanguage.current), color = subTextColor, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 }
             }
         }
@@ -1018,7 +1211,7 @@ private fun OnboardingTutorial(
                     onClick = { currentStep-- },
                     shape = CircleShape
                 ) {
-                    Text("Indietro", color = subTextColor, fontWeight = FontWeight.Bold)
+                    Text(AppStrings.get(AppStrings.indietro, LocalAppLanguage.current), color = subTextColor, fontWeight = FontWeight.Bold)
                 }
             } else {
                 Spacer(Modifier.width(80.dp))
@@ -1142,6 +1335,7 @@ private fun Dashboard(
     selectedMonth: String?,
     isDark: Boolean,
     isPrivacyMode: Boolean,
+    reminders: List<PaymentReminder>,
     onTogglePrivacy: () -> Unit,
     onLockClick: () -> Unit,
     onOpenTutorialClick: () -> Unit,
@@ -1152,6 +1346,9 @@ private fun Dashboard(
     onClearAllClick: () -> Unit,
     onSetBudgetClick: () -> Unit,
     onDeleteExpense: (Expense) -> Unit,
+    onOpenSettingsClick: () -> Unit,
+    onOpenRemindersClick: () -> Unit,
+    onExpenseClick: (Expense) -> Unit,
     modifier: Modifier
 ) {
     val textColor = if (isDark) Color(0xFFF3EFEA) else Color(0xFF1E1B18)
@@ -1174,7 +1371,12 @@ private fun Dashboard(
                     )
                 }
                 Spacer(Modifier.height(2.dp))
-                Text("Panoramica Spese", color = textColor, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Text(AppStrings.get(AppStrings.panoramica_spese, LocalAppLanguage.current), color = textColor, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
+                    androidx.compose.material3.IconButton(onClick = onOpenSettingsClick) {
+                        Icon(Icons.Default.Settings, contentDescription = "Settings", tint = textColor)
+                    }
+                }
             }
         }
 
@@ -1186,17 +1388,45 @@ private fun Dashboard(
 
         item { SummaryCard(total, budget, expenses, numMonths, isDark, isPrivacyMode, onSetBudgetClick) }
 
-        item {
-            QuickActionsStrip(
-                isPrivacyMode = isPrivacyMode,
-                isDark = isDark,
-                onTogglePrivacy = onTogglePrivacy,
-                onLockClick = onLockClick,
-                onOpenTutorialClick = onOpenTutorialClick,
-                onImportClick = onImportClick,
-                onExportClick = onExportClick,
-                onClearAllClick = onClearAllClick
-            )
+        if (reminders.isNotEmpty()) {
+            item {
+                val nextReminder = reminders.firstOrNull()
+                if (nextReminder != null) {
+                    val cardBg = if (isDark) Color(0xFF1E1C1A) else Color.White
+                    Surface(
+                        color = cardBg,
+                        shape = RoundedCornerShape(20.dp),
+                        shadowElevation = 2.dp,
+                        modifier = Modifier.fillMaxWidth().clickable { onOpenRemindersClick() }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .background(Terracotta.copy(alpha = 0.15f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.NotificationsActive, contentDescription = null, tint = Terracotta, modifier = Modifier.size(20.dp))
+                            }
+                            Spacer(Modifier.width(14.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(AppStrings.get(AppStrings.prossima_scadenza, LocalAppLanguage.current), color = Terracotta, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text(nextReminder.title, color = textColor, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                                Text("${AppStrings.get(AppStrings.scadenza_colon, LocalAppLanguage.current)} ${nextReminder.dueDate}", color = if (isDark) Color(0xFFA0B2A3) else Color(0xFF5B7B68), fontSize = 12.sp)
+                            }
+                            Text(
+                                text = "${String.format(java.util.Locale.getDefault(), "%.2f", nextReminder.amount)} €",
+                                color = textColor,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 15.sp
+                            )
+                        }
+                    }
+                }
+            }
         }
 
         item { CategoryQuickStrip(expenses, isDark, isPrivacyMode, onCategoryClick) }
@@ -1209,7 +1439,7 @@ private fun Dashboard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Ultimi Movimenti", color = textColor, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text(AppStrings.get(AppStrings.ultimi_movimenti, LocalAppLanguage.current), color = textColor, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Surface(
                     color = if (isDark) Color(0xFF282522) else Color(0xFFEBE5DA),
                     shape = CircleShape,
@@ -1240,7 +1470,7 @@ private fun Dashboard(
                             Icon(Icons.AutoMirrored.Filled.ReceiptLong, contentDescription = null, tint = Sage, modifier = Modifier.size(32.dp))
                         }
                         Spacer(Modifier.height(12.dp))
-                        Text("Nessuna spesa presente", color = textColor, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text(AppStrings.get(AppStrings.nessuna_spesa_presente, LocalAppLanguage.current), color = textColor, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                         Text(
                             "Aggiungi una nuova spesa con il pulsante + oppure importa un file XLS/CSV con lo strumento di importazione.",
                             color = Sage,
@@ -1252,7 +1482,7 @@ private fun Dashboard(
                 }
             }
         } else {
-            items(expenses.take(5)) { ExpenseRow(it, isDark, isPrivacyMode, onDeleteExpense) }
+            items(expenses.take(5)) { ExpenseRow(it, isDark, isPrivacyMode, onClick = { onExpenseClick(it) }, onDelete = onDeleteExpense) }
         }
 
         item { Spacer(Modifier.height(88.dp)) }
@@ -1275,7 +1505,7 @@ private fun QuickActionsStrip(
     val subTextColor = if (isDark) Color(0xFFA0B2A3) else Color(0xFF5B7B68)
 
     Column {
-        Text("Gestione & Sicurezza", color = textColor, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text(AppStrings.get(AppStrings.gestione_sicurezza, LocalAppLanguage.current), color = textColor, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(10.dp))
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -1305,7 +1535,7 @@ private fun QuickActionsStrip(
                         }
                         Spacer(Modifier.width(10.dp))
                         Column {
-                            Text("Privacy", color = textColor, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Text(AppStrings.get(AppStrings.privacy, LocalAppLanguage.current), color = textColor, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                             Text(if (isPrivacyMode) "Cifre nascoste" else "Cifre visibili", color = subTextColor, fontSize = 11.sp)
                         }
                     }
@@ -1331,8 +1561,8 @@ private fun QuickActionsStrip(
                         }
                         Spacer(Modifier.width(10.dp))
                         Column {
-                            Text("Sicurezza", color = textColor, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                            Text("Blocca ora", color = subTextColor, fontSize = 11.sp)
+                            Text(AppStrings.get(AppStrings.sicurezza, LocalAppLanguage.current), color = textColor, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Text(AppStrings.get(AppStrings.blocca_ora, LocalAppLanguage.current), color = subTextColor, fontSize = 11.sp)
                         }
                     }
                 }
@@ -1357,8 +1587,8 @@ private fun QuickActionsStrip(
                         }
                         Spacer(Modifier.width(10.dp))
                         Column {
-                            Text("Importa", color = textColor, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                            Text("XLS / CSV", color = subTextColor, fontSize = 11.sp)
+                            Text(AppStrings.get(AppStrings.importa, LocalAppLanguage.current), color = textColor, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Text(AppStrings.get(AppStrings.xls_csv, LocalAppLanguage.current), color = subTextColor, fontSize = 11.sp)
                         }
                     }
                 }
@@ -1383,8 +1613,8 @@ private fun QuickActionsStrip(
                         }
                         Spacer(Modifier.width(10.dp))
                         Column {
-                            Text("Esporta", color = textColor, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                            Text("Backup CSV", color = subTextColor, fontSize = 11.sp)
+                            Text(AppStrings.get(AppStrings.esporta, LocalAppLanguage.current), color = textColor, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Text(AppStrings.get(AppStrings.backup_csv, LocalAppLanguage.current), color = subTextColor, fontSize = 11.sp)
                         }
                     }
                 }
@@ -1405,12 +1635,12 @@ private fun QuickActionsStrip(
                             modifier = Modifier.size(36.dp).background(Violet.copy(alpha = 0.15f), CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.HelpOutline, contentDescription = null, tint = Violet, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.Info, contentDescription = null, tint = Violet, modifier = Modifier.size(18.dp))
                         }
                         Spacer(Modifier.width(10.dp))
                         Column {
-                            Text("Guida", color = textColor, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                            Text("Tutorial app", color = subTextColor, fontSize = 11.sp)
+                            Text(AppStrings.get(AppStrings.guida, LocalAppLanguage.current), color = textColor, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Text(AppStrings.get(AppStrings.tutorial_app, LocalAppLanguage.current), color = subTextColor, fontSize = 11.sp)
                         }
                     }
                 }
@@ -1435,8 +1665,8 @@ private fun QuickActionsStrip(
                         }
                         Spacer(Modifier.width(10.dp))
                         Column {
-                            Text("Svuota", color = textColor, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                            Text("Reset dati", color = subTextColor, fontSize = 11.sp)
+                            Text(AppStrings.get(AppStrings.svuota, LocalAppLanguage.current), color = textColor, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Text(AppStrings.get(AppStrings.reset_dati, LocalAppLanguage.current), color = subTextColor, fontSize = 11.sp)
                         }
                     }
                 }
@@ -1606,7 +1836,8 @@ private fun SummaryCard(
                             Spacer(Modifier.width(6.dp))
                             Text(
                                 if (effectiveBudgetLimit > 0) {
-                                    if (budgetRemaining >= 0) "Rim.: ${formatAmount(budgetRemaining, isPrivacyMode)}" else "Superato!"
+                                    val appLang = LocalAppLanguage.current
+if (budgetRemaining >= 0) "${AppStrings.get(AppStrings.rimanente, appLang)}: ${formatAmount(budgetRemaining, isPrivacyMode)}" else AppStrings.get(AppStrings.superato, appLang)
                                 } else "Budget",
                                 color = Color.White,
                                 fontSize = 11.sp,
@@ -1631,7 +1862,7 @@ private fun CategoryQuickStrip(expenses: List<Expense>, isDark: Boolean, isPriva
     val categoryTotals = expenses.groupBy { it.category }.mapValues { entry -> entry.value.sumOf { it.amount } }
 
     Column {
-        Text("Categorie principali", color = textColor, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text(AppStrings.get(AppStrings.categorie_principali, LocalAppLanguage.current), color = textColor, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(10.dp))
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -1705,10 +1936,12 @@ private fun InsightCard(expenses: List<Expense>, isDark: Boolean, isPrivacyMode:
             }
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
-                Text("Suggerimento Intelligente", color = textColor, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                Text(AppStrings.get(AppStrings.suggerimento_intelligente, LocalAppLanguage.current), color = textColor, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                 Spacer(Modifier.height(2.dp))
+                val appLang = LocalAppLanguage.current
+                val topCatName = if (top != null) AppStrings.translateCategory(top.key, appLang) else ""
                 Text(
-                    if (top != null) "${top.key} e la spesa maggiore (${formatAmount(top.value.sumOf { it.amount }, isPrivacyMode)}). Prova a fissare un limite mensile!"
+                    if (top != null) "$topCatName " + (if (appLang == AppLanguage.ENGLISH) "is your highest expense" else "è la spesa maggiore") + " (${formatAmount(top.value.sumOf { it.amount }, isPrivacyMode)})."
                     else "Aggiungi le prime spese per ricevere analisi personalizzate.",
                     color = textColor.copy(alpha = 0.8f),
                     fontSize = 13.sp,
@@ -1730,6 +1963,7 @@ private fun Movements(
     onMonthSelect: (String?) -> Unit,
     onClearCategoryFilter: () -> Unit,
     onDeleteExpense: (Expense) -> Unit,
+    onExpenseClick: (Expense) -> Unit,
     modifier: Modifier
 ) {
     val textColor = if (isDark) Color(0xFFF3EFEA) else Color(0xFF1E1B18)
@@ -1753,8 +1987,8 @@ private fun Movements(
         item {
             Spacer(Modifier.height(8.dp))
             Column {
-                Text("Movimenti", color = textColor, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
-                Text("Tutte le tue uscite", color = subTextColor, fontSize = 14.sp)
+                Text(AppStrings.get(AppStrings.movimenti, LocalAppLanguage.current), color = textColor, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+                Text(AppStrings.get(AppStrings.tutte_le_tue_uscite, LocalAppLanguage.current), color = subTextColor, fontSize = 14.sp)
             }
 
             Spacer(Modifier.height(12.dp))
@@ -1767,7 +2001,7 @@ private fun Movements(
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
-                placeholder = { Text("Cerca tra le spese...", color = subTextColor) },
+                placeholder = { Text(AppStrings.get(AppStrings.cerca_tra_le_spese, LocalAppLanguage.current), color = subTextColor) },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = subTextColor) },
                 singleLine = true,
                 shape = CircleShape,
@@ -1866,13 +2100,13 @@ private fun Movements(
                             Icon(Icons.AutoMirrored.Filled.ReceiptLong, contentDescription = null, tint = subTextColor, modifier = Modifier.size(36.dp))
                         }
                         Spacer(Modifier.height(12.dp))
-                        Text("Nessuna spesa trovata", color = textColor, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        Text("Prova a modificare la ricerca o il filtro", color = subTextColor, fontSize = 13.sp)
+                        Text(AppStrings.get(AppStrings.nessuna_spesa_trovata, LocalAppLanguage.current), color = textColor, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text(AppStrings.get(AppStrings.prova_a_modificare_la_ricerca_o_il_filtro, LocalAppLanguage.current), color = subTextColor, fontSize = 13.sp)
                     }
                 }
             }
         } else {
-            items(filteredExpenses) { ExpenseRow(it, isDark, isPrivacyMode, onDeleteExpense) }
+            items(filteredExpenses) { ExpenseRow(it, isDark, isPrivacyMode, onClick = { onExpenseClick(it) }, onDelete = onDeleteExpense) }
         }
 
         item { Spacer(Modifier.height(88.dp)) }
@@ -1880,7 +2114,7 @@ private fun Movements(
 }
 
 @Composable
-private fun ExpenseRow(expense: Expense, isDark: Boolean, isPrivacyMode: Boolean, onDelete: (Expense) -> Unit) {
+private fun ExpenseRow(expense: Expense, isDark: Boolean, isPrivacyMode: Boolean, onClick: () -> Unit, onDelete: (Expense) -> Unit) {
     val meta = getCategoryMeta(expense.category)
     val cardBg = if (isDark) Color(0xFF1E1C1A) else Color.White
     val textColor = if (isDark) Color(0xFFF3EFEA) else Color(0xFF1E1B18)
@@ -1889,7 +2123,7 @@ private fun ExpenseRow(expense: Expense, isDark: Boolean, isPrivacyMode: Boolean
         color = cardBg,
         shape = RoundedCornerShape(22.dp),
         shadowElevation = 1.dp,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth().clickable { onClick() }
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
@@ -2025,8 +2259,8 @@ private fun Reports(
     ) {
         item {
             Spacer(Modifier.height(8.dp))
-            Text("Report & Statistiche", color = textColor, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
-            Text("Analisi dettagliata e KPI della tua spesa", color = subTextColor, fontSize = 14.sp)
+            Text(AppStrings.get(AppStrings.report_statistiche, LocalAppLanguage.current), color = textColor, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+            Text(AppStrings.get(AppStrings.analisi_dettagliata_e_kpi_della_tua_spesa, LocalAppLanguage.current), color = subTextColor, fontSize = 14.sp)
         }
 
         if (availableMonths.size > 1) {
@@ -2055,7 +2289,8 @@ private fun Reports(
                             Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = Terracotta, modifier = Modifier.size(16.dp))
                         }
                         Spacer(Modifier.height(8.dp))
-                        Text(if (numMonths > 1) "Media / Mese" else "Totale Mese", color = subTextColor, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                        val appLang = LocalAppLanguage.current
+Text(if (numMonths > 1) AppStrings.get(AppStrings.media_mese, appLang) else AppStrings.get(AppStrings.totale_mese, appLang), color = subTextColor, fontSize = 11.sp, fontWeight = FontWeight.Medium)
                         Text(formatAmount(monthlyAvg, isPrivacyMode), color = textColor, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                     }
                 }
@@ -2075,7 +2310,7 @@ private fun Reports(
                             Icon(Icons.AutoMirrored.Filled.TrendingUp, contentDescription = null, tint = Sage, modifier = Modifier.size(16.dp))
                         }
                         Spacer(Modifier.height(8.dp))
-                        Text("Media / Giorno", color = subTextColor, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                        Text(AppStrings.get(AppStrings.media_giorno, LocalAppLanguage.current), color = subTextColor, fontSize = 11.sp, fontWeight = FontWeight.Medium)
                         Text(formatAmount(dailyAvg, isPrivacyMode), color = textColor, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                     }
                 }
@@ -2095,7 +2330,7 @@ private fun Reports(
                             Icon(Icons.Default.PieChart, contentDescription = null, tint = Ochre, modifier = Modifier.size(16.dp))
                         }
                         Spacer(Modifier.height(8.dp))
-                        Text("Spesa Max", color = subTextColor, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                        Text(AppStrings.get(AppStrings.spesa_max, LocalAppLanguage.current), color = subTextColor, fontSize = 11.sp, fontWeight = FontWeight.Medium)
                         Text(formatAmount(maxExpense, isPrivacyMode), color = textColor, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                     }
                 }
@@ -2125,14 +2360,14 @@ private fun Reports(
                                     Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = Terracotta, modifier = Modifier.size(16.dp))
                                 }
                                 Spacer(Modifier.width(10.dp))
-                                Text("Andamento per Anno", color = textColor, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                                Text(AppStrings.get(AppStrings.andamento_per_anno, LocalAppLanguage.current), color = textColor, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                             }
                             Surface(
                                 color = softBgColor,
                                 shape = CircleShape
                             ) {
                                 Text(
-                                    "${yearlyGrouped.size} ${if (yearlyGrouped.size == 1) "anno" else "anni"}",
+                                    "${yearlyGrouped.size} " + (if (yearlyGrouped.size == 1) AppStrings.get(AppStrings.anno, LocalAppLanguage.current) else AppStrings.get(AppStrings.anni, LocalAppLanguage.current)),
                                     color = Terracotta,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
@@ -2172,7 +2407,7 @@ private fun Reports(
                                             }
                                             Spacer(Modifier.width(10.dp))
                                             Text(
-                                                "$yearMonths mesi registrati",
+                                                "$yearMonths " + AppStrings.get(AppStrings.mesi_registrati, LocalAppLanguage.current),
                                                 color = subTextColor,
                                                 fontSize = 12.sp,
                                                 fontWeight = FontWeight.Medium
@@ -2195,12 +2430,12 @@ private fun Reports(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(
-                                            "Media mensile $year:",
+                                            AppStrings.get(AppStrings.media_mensile, LocalAppLanguage.current) + " $year:",
                                             color = subTextColor,
                                             fontSize = 12.sp
                                         )
                                         Text(
-                                            "${formatAmount(yearMonthlyAvg, isPrivacyMode)} / mese",
+                                            formatAmount(yearMonthlyAvg, isPrivacyMode) + " " + AppStrings.get(AppStrings.al_mese, LocalAppLanguage.current),
                                             color = Sage,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 13.sp
@@ -2230,7 +2465,7 @@ private fun Reports(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Distribuzione Spese", color = textColor, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                        Text(AppStrings.get(AppStrings.distribuzione_spese, LocalAppLanguage.current), color = textColor, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                         if (selectedCategoryFilter != null) {
                             Surface(
                                 color = softBgColor,
@@ -2238,7 +2473,7 @@ private fun Reports(
                                 modifier = Modifier.clip(CircleShape).clickable { selectedCategoryFilter = null }
                             ) {
                                 Text(
-                                    "Mostra tutti",
+                                    AppStrings.get(AppStrings.mostra_tutti, LocalAppLanguage.current),
                                     color = Terracotta,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
@@ -2508,7 +2743,7 @@ private fun AddExpenseDialog(
                         )
                     }
                     Spacer(Modifier.width(12.dp))
-                    Text("Nuova Spesa", color = textColor, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                    Text(AppStrings.get(AppStrings.nuova_spesa, LocalAppLanguage.current), color = textColor, fontWeight = FontWeight.Bold, fontSize = 20.sp)
                 }
 
                 Spacer(Modifier.height(16.dp))
@@ -2534,7 +2769,7 @@ private fun AddExpenseDialog(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(6.dp))
-                                Text("Inserimento IA", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Text(AppStrings.get(AppStrings.inserimento_ia, LocalAppLanguage.current), fontWeight = FontWeight.Bold, fontSize = 13.sp)
                             }
                         }
                     )
@@ -2545,7 +2780,7 @@ private fun AddExpenseDialog(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(6.dp))
-                                Text("Manuale", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Text(AppStrings.get(AppStrings.manuale, LocalAppLanguage.current), fontWeight = FontWeight.Bold, fontSize = 13.sp)
                             }
                         }
                     )
@@ -2580,7 +2815,7 @@ private fun AddExpenseDialog(
                     )
 
                     // Prompt Esempi Rapidi
-                    Text("Suggerimenti rapidi:", color = textColor, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                    Text(AppStrings.get(AppStrings.suggerimenti_rapidi, LocalAppLanguage.current), color = textColor, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         listOf(
                             "Caffè e cornetto 3,50€",
@@ -2617,7 +2852,7 @@ private fun AddExpenseDialog(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Terracotta, modifier = Modifier.size(16.dp))
                                     Spacer(Modifier.width(6.dp))
-                                    Text("Anteprima IA", color = Terracotta, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                    Text(AppStrings.get(AppStrings.anteprima_ia, LocalAppLanguage.current), color = Terracotta, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                 }
                                 Spacer(Modifier.height(8.dp))
                                 Row(
@@ -2660,7 +2895,7 @@ private fun AddExpenseDialog(
                     OutlinedTextField(
                         value = manualTitle,
                         onValueChange = { manualTitle = it },
-                        label = { Text("Descrizione") },
+                        label = { Text(AppStrings.get(AppStrings.descrizione, LocalAppLanguage.current)) },
                         singleLine = true,
                         shape = RoundedCornerShape(16.dp),
                         colors = OutlinedTextFieldDefaults.colors(
@@ -2675,7 +2910,7 @@ private fun AddExpenseDialog(
                     OutlinedTextField(
                         value = manualAmount,
                         onValueChange = { manualAmount = it },
-                        label = { Text("Importo (€)") },
+                        label = { Text(AppStrings.get(AppStrings.importo, LocalAppLanguage.current)) },
                         singleLine = true,
                         shape = RoundedCornerShape(16.dp),
                         colors = OutlinedTextFieldDefaults.colors(
@@ -2687,7 +2922,7 @@ private fun AddExpenseDialog(
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    Text("Categoria", color = textColor, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    Text(AppStrings.get(AppStrings.categoria, LocalAppLanguage.current), color = textColor, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
 
                     ExposedDropdownMenuBox(
                         expanded = dropdownExpanded,
@@ -2699,7 +2934,7 @@ private fun AddExpenseDialog(
                             value = manualCategory,
                             onValueChange = {},
                             readOnly = true,
-                            label = { Text("Seleziona categoria") },
+                            label = { Text(AppStrings.get(AppStrings.seleziona_categoria, LocalAppLanguage.current)) },
                             leadingIcon = {
                                 Box(
                                     modifier = Modifier
@@ -2800,7 +3035,7 @@ private fun AddExpenseDialog(
                 onClick = onDismiss,
                 shape = CircleShape
             ) {
-                Text("Annulla", color = Sage)
+                Text(AppStrings.get(AppStrings.annulla, LocalAppLanguage.current), color = Sage)
             }
         }
     )
@@ -2832,7 +3067,7 @@ private fun SetBudgetDialog(
                     Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, tint = Sage)
                 }
                 Spacer(Modifier.width(12.dp))
-                Text("Budget Mensile", color = textColor, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                Text(AppStrings.get(AppStrings.budget_mensile, LocalAppLanguage.current), color = textColor, fontWeight = FontWeight.Bold, fontSize = 20.sp)
             }
         },
         text = {
@@ -2867,12 +3102,12 @@ private fun SetBudgetDialog(
                 shape = CircleShape,
                 colors = ButtonDefaults.buttonColors(containerColor = Sage)
             ) {
-                Text("Salva", fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 8.dp))
+                Text(AppStrings.get(AppStrings.salva, LocalAppLanguage.current), fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 8.dp))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss, shape = CircleShape) {
-                Text("Annulla", color = Terracotta)
+                Text(AppStrings.get(AppStrings.annulla, LocalAppLanguage.current), color = Terracotta)
             }
         }
     )
@@ -3371,4 +3606,663 @@ object XlsSheetImporter {
             else -> "Altro"
         }
     }
+}
+
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SettingsScreen(
+    isDark: Boolean,
+    isPrivacyMode: Boolean,
+    onTogglePrivacy: () -> Unit,
+    onLockClick: () -> Unit,
+    onImportClick: () -> Unit,
+    onExportClick: () -> Unit,
+    onClearAllClick: () -> Unit,
+    onOpenTutorialClick: () -> Unit,
+    onLanguageClick: () -> Unit,
+    onRemindersClick: () -> Unit,
+    onClose: () -> Unit
+) {
+    val textColor = if (isDark) Color(0xFFF3EFEA) else Color(0xFF1E1B18)
+    val appLang = LocalAppLanguage.current
+    val cardBg = if (isDark) Color(0xFF1E1C1A) else Color.White
+    val paperColor = if (isDark) Color(0xFF121110) else Color(0xFFFAF7F2)
+
+    Box(modifier = Modifier.fillMaxSize().background(paperColor)) {
+        BackgroundCircles(isDark)
+
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text(AppStrings.get(AppStrings.impostazioni, appLang), color = textColor, fontWeight = FontWeight.Bold) },
+                    navigationIcon = {
+                        androidx.compose.material3.IconButton(onClick = onClose) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = AppStrings.get(AppStrings.indietro, appLang), tint = textColor)
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                )
+            },
+            containerColor = Color.Transparent
+        ) { padding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = 20.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Spacer(Modifier.height(8.dp))
+                
+                SettingsItemRow(
+                    icon = Icons.Default.Language,
+                    title = AppStrings.get(AppStrings.lingua, appLang),
+                    subtitle = appLang.displayName,
+                    onClick = onLanguageClick,
+                    isDark = isDark,
+                    cardBg = cardBg,
+                    textColor = textColor
+                )
+
+                SettingsItemRow(
+                    icon = Icons.Default.Notifications,
+                    title = AppStrings.get(AppStrings.promemoria_pagamenti, appLang),
+                    subtitle = AppStrings.get(AppStrings.scadenze, appLang),
+                    onClick = onRemindersClick,
+                    isDark = isDark,
+                    cardBg = cardBg,
+                    textColor = textColor
+                )
+
+                SettingsItemRow(
+                    icon = if (isPrivacyMode) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                    title = AppStrings.get(AppStrings.privacy, appLang),
+                    subtitle = AppStrings.get(AppStrings.nascondi_saldi, appLang),
+                    onClick = onTogglePrivacy,
+                    isDark = isDark,
+                    cardBg = cardBg,
+                    textColor = textColor,
+                    action = {
+                        androidx.compose.material3.Switch(checked = isPrivacyMode, onCheckedChange = { onTogglePrivacy() })
+                    }
+                )
+
+                SettingsItemRow(
+                    icon = Icons.Default.Lock,
+                    title = AppStrings.get(AppStrings.sicurezza, appLang),
+                    subtitle = AppStrings.get(AppStrings.blocca_ora, appLang),
+                    onClick = onLockClick,
+                    isDark = isDark,
+                    cardBg = cardBg,
+                    textColor = textColor
+                )
+                
+                SettingsItemRow(
+                    icon = Icons.Default.FileDownload,
+                    title = AppStrings.get(AppStrings.importa, appLang),
+                    subtitle = AppStrings.get(AppStrings.xls_csv, appLang),
+                    onClick = onImportClick,
+                    isDark = isDark,
+                    cardBg = cardBg,
+                    textColor = textColor
+                )
+                
+                SettingsItemRow(
+                    icon = Icons.Default.FileUpload,
+                    title = AppStrings.get(AppStrings.esporta, appLang),
+                    subtitle = AppStrings.get(AppStrings.backup_csv, appLang),
+                    onClick = onExportClick,
+                    isDark = isDark,
+                    cardBg = cardBg,
+                    textColor = textColor
+                )
+
+                SettingsItemRow(
+                    icon = Icons.Default.Info,
+                    title = AppStrings.get(AppStrings.guida, appLang),
+                    subtitle = AppStrings.get(AppStrings.tutorial_app, appLang),
+                    onClick = onOpenTutorialClick,
+                    isDark = isDark,
+                    cardBg = cardBg,
+                    textColor = textColor
+                )
+                
+                SettingsItemRow(
+                    icon = Icons.Default.DeleteForever,
+                    title = AppStrings.get(AppStrings.svuota, appLang),
+                    subtitle = AppStrings.get(AppStrings.reset_dati, appLang),
+                    onClick = onClearAllClick,
+                    isDark = isDark,
+                    cardBg = cardBg,
+                    textColor = Color(0xFFD95D39)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun SettingsItemRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    isDark: Boolean,
+    cardBg: Color,
+    textColor: Color,
+    action: @Composable (() -> Unit)? = null
+) {
+    val subTextColor = if (isDark) Color(0xFFA0B2A3) else Color(0xFF5B7B68)
+    Surface(
+        onClick = onClick,
+        color = cardBg,
+        shape = RoundedCornerShape(16.dp),
+        shadowElevation = 2.dp,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(Terracotta.copy(alpha = 0.15f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = title, tint = Terracotta)
+            }
+            Spacer(Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, color = textColor, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text(subtitle, color = subTextColor, fontSize = 12.sp)
+            }
+            if (action != null) {
+                action()
+            } else {
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = subTextColor)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ExpenseDetailScreen(
+    expense: Expense,
+    isDark: Boolean,
+    onClose: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val textColor = if (isDark) Color(0xFFF3EFEA) else Color(0xFF1E1B18)
+    val cardBg = if (isDark) Color(0xFF1E1C1A) else Color.White
+    val subTextColor = if (isDark) Color(0xFFA0B2A3) else Color(0xFF5B7B68)
+    val appLang = LocalAppLanguage.current
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(AppStrings.get(AppStrings.dettagli_spesa, appLang), color = textColor, fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    androidx.compose.material3.IconButton(onClick = onClose) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = AppStrings.get(AppStrings.indietro, appLang), tint = textColor)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+            )
+        },
+        containerColor = if (isDark) Color(0xFF121110) else Color(0xFFFAF7F2)
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Spacer(Modifier.height(16.dp))
+            
+            Surface(
+                color = cardBg,
+                shape = RoundedCornerShape(16.dp),
+                shadowElevation = 4.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    val catInfo = getCategoryMeta(expense.category)
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .background(catInfo.color.copy(alpha = 0.2f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(catInfo.icon, contentDescription = null, tint = catInfo.color, modifier = Modifier.size(32.dp))
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    Text(expense.title, color = textColor, fontSize = 24.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "-${String.format(java.util.Locale.getDefault(), "%.2f", expense.amount)} €",
+                        color = Color(0xFFD95D39),
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
+            }
+
+            Surface(
+                color = cardBg,
+                shape = RoundedCornerShape(16.dp),
+                shadowElevation = 2.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    DetailRow(AppStrings.get(AppStrings.categoria, appLang), AppStrings.translateCategory(expense.category, appLang), textColor, subTextColor)
+                    DetailRow(AppStrings.get(AppStrings.mese, appLang), AppStrings.translateMonth(expense.month, appLang), textColor, subTextColor)
+                    if (expense.date.isNotBlank()) {
+                        DetailRow(AppStrings.get(AppStrings.data, appLang), expense.date, textColor, subTextColor)
+                    }
+                    if (expense.time.isNotBlank()) {
+                        DetailRow(AppStrings.get(AppStrings.ora, appLang), expense.time, textColor, subTextColor)
+                    }
+                    if (expense.description.isNotBlank()) {
+                        DetailRow(AppStrings.get(AppStrings.descrizione, appLang), expense.description, textColor, subTextColor)
+                    }
+                }
+            }
+            
+            Spacer(Modifier.weight(1f))
+            
+            Button(
+                onClick = { onDelete(); onClose() },
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD95D39)),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Icon(Icons.Default.Delete, contentDescription = null, tint = Color.White)
+                Spacer(Modifier.width(8.dp))
+                Text(AppStrings.get(AppStrings.elimina, appLang), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+fun DetailRow(label: String, value: String, textColor: Color, subTextColor: Color) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, color = subTextColor, fontSize = 16.sp)
+        Text(value, color = textColor, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun LanguageSettingsDialog(
+    currentLanguage: AppLanguage,
+    onLanguageSelected: (AppLanguage) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val appLang = LocalAppLanguage.current
+    val isDark = isSystemInDarkTheme()
+    val bgColor = if (isDark) Color(0xFF1E1C1A) else Color.White
+    val textColor = if (isDark) Color(0xFFF3EFEA) else Color(0xFF1E1B18)
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(AppStrings.get(AppStrings.lingua, appLang), color = textColor, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                AppLanguage.values().forEach { lang ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { 
+                                onLanguageSelected(lang)
+                                onDismiss()
+                            }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        androidx.compose.material3.RadioButton(
+                            selected = currentLanguage == lang,
+                            onClick = { 
+                                onLanguageSelected(lang)
+                                onDismiss()
+                            },
+                            colors = androidx.compose.material3.RadioButtonDefaults.colors(selectedColor = Terracotta, unselectedColor = Color.Gray)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(lang.flag, fontSize = 24.sp)
+                        Spacer(Modifier.width(8.dp))
+                        Text(lang.displayName, color = textColor, fontSize = 16.sp)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) {
+                Text(AppStrings.get(AppStrings.annulla, appLang), color = Terracotta)
+            }
+        },
+        containerColor = bgColor
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun RemindersScreen(
+    reminders: List<PaymentReminder>,
+    isDark: Boolean,
+    onAddReminder: (PaymentReminder) -> Unit,
+    onDeleteReminder: (PaymentReminder) -> Unit,
+    onPayReminder: (PaymentReminder) -> Unit,
+    modifier: Modifier,
+    onClose: (() -> Unit)? = null
+) {
+    val textColor = if (isDark) Color(0xFFF3EFEA) else Color(0xFF1E1B18)
+    val cardBg = if (isDark) Color(0xFF1E1C1A) else Color.White
+    val subTextColor = if (isDark) Color(0xFFA0B2A3) else Color(0xFF5B7B68)
+    val appLang = LocalAppLanguage.current
+
+    var showAddDialog by remember { mutableStateOf(false) }
+
+    if (showAddDialog) {
+        AddReminderDialog(
+            isDarkTheme = isDark,
+            onDismiss = { showAddDialog = false },
+            onAdd = { 
+                onAddReminder(it)
+                showAddDialog = false
+            }
+        )
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(AppStrings.get(AppStrings.promemoria_pagamenti, appLang), color = textColor, fontWeight = FontWeight.Bold, fontSize = 28.sp) },
+                navigationIcon = {
+                    if (onClose != null) {
+                        IconButton(onClick = onClose) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = AppStrings.get(AppStrings.indietro, appLang), tint = textColor)
+                        }
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+            )
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { showAddDialog = true },
+                shape = CircleShape,
+                containerColor = Terracotta,
+                contentColor = Color.White
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null)
+            }
+        },
+        containerColor = Color.Transparent
+    ) { padding ->
+        if (reminders.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.NotificationsNone, contentDescription = null, tint = subTextColor, modifier = Modifier.size(64.dp))
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        AppStrings.get(AppStrings.nessun_promemoria_attivo_aggiungine_uno_per_non_dimenticare_le_tue_scadenze, appLang),
+                        color = subTextColor,
+                        fontSize = 14.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 32.dp)
+                    )
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                item { Spacer(Modifier.height(8.dp)) }
+                items(reminders) { reminder ->
+                    ReminderCard(reminder, isDark, onPay = { onPayReminder(reminder) }, onDelete = { onDeleteReminder(reminder) })
+                }
+                item { Spacer(Modifier.height(80.dp)) }
+            }
+        }
+    }
+}
+
+@Composable
+fun ReminderCard(
+    reminder: PaymentReminder,
+    isDark: Boolean,
+    onPay: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val textColor = if (isDark) Color(0xFFF3EFEA) else Color(0xFF1E1B18)
+    val cardBg = if (isDark) Color(0xFF1E1C1A) else Color.White
+    val subTextColor = if (isDark) Color(0xFFA0B2A3) else Color(0xFF5B7B68)
+    val appLang = LocalAppLanguage.current
+
+    Surface(
+        color = cardBg,
+        shape = RoundedCornerShape(20.dp),
+        shadowElevation = 2.dp,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(Terracotta.copy(alpha = 0.15f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Notifications, contentDescription = null, tint = Terracotta)
+            }
+            Spacer(Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(reminder.title, color = textColor, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                Text("${AppStrings.get(AppStrings.scadenza_colon, appLang)} ${reminder.dueDate}", color = subTextColor, fontSize = 12.sp)
+                if (reminder.maxPayments != null) {
+                    Text("${AppStrings.get(AppStrings.rate_colon, appLang)} ${reminder.paymentsMade}/${reminder.maxPayments}", color = subTextColor, fontSize = 11.sp)
+                }
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = "${String.format(Locale.getDefault(), "%.2f", reminder.amount)} €",
+                    color = Terracotta,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 16.sp
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = onDelete, contentPadding = PaddingValues(4.dp)) {
+                        Text(AppStrings.get(AppStrings.elimina, appLang), color = Color.Gray, fontSize = 12.sp)
+                    }
+                    Button(
+                        onClick = onPay,
+                        shape = CircleShape,
+                        colors = ButtonDefaults.buttonColors(containerColor = Sage),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        modifier = Modifier.height(32.dp)
+                    ) {
+                        Text(AppStrings.get(AppStrings.paga_ora, appLang), color = Color.White, fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AddReminderDialog(
+    isDarkTheme: Boolean,
+    onDismiss: () -> Unit,
+    onAdd: (PaymentReminder) -> Unit
+) {
+    var title by remember { mutableStateOf("") }
+    var amountStr by remember { mutableStateOf("") }
+    
+    val defaultDate = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault()).format(java.util.Date())
+    var dueDate by remember { mutableStateOf(defaultDate) }
+    var isRecurring by remember { mutableStateOf(false) }
+    var maxPaymentsStr by remember { mutableStateOf("") }
+
+    val textColor = if (isDarkTheme) Color(0xFFF3EFEA) else Color(0xFF1E1B18)
+    val dialogBg = if (isDarkTheme) Color(0xFF1D1B18) else Color.White
+    val fieldBg = if (isDarkTheme) Color(0xFF2A2724) else Color.White
+    val appLang = LocalAppLanguage.current
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(32.dp),
+        containerColor = dialogBg,
+        title = {
+            Text(AppStrings.get(AppStrings.nuovo_promemoria, appLang), color = textColor, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text(AppStrings.get(AppStrings.descrizione, appLang)) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(16.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Terracotta,
+                        unfocusedBorderColor = Color.Gray,
+                        focusedLabelColor = Terracotta,
+                        focusedTextColor = textColor,
+                        unfocusedTextColor = textColor,
+                        focusedContainerColor = fieldBg,
+                        unfocusedContainerColor = fieldBg
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = amountStr,
+                    onValueChange = { amountStr = it },
+                    label = { Text(AppStrings.get(AppStrings.importo, appLang)) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(16.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Terracotta,
+                        unfocusedBorderColor = Color.Gray,
+                        focusedLabelColor = Terracotta,
+                        focusedTextColor = textColor,
+                        unfocusedTextColor = textColor,
+                        focusedContainerColor = fieldBg,
+                        unfocusedContainerColor = fieldBg
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = dueDate,
+                    onValueChange = { dueDate = it },
+                    label = { Text("Data scadenza") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(16.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Terracotta,
+                        unfocusedBorderColor = Color.Gray,
+                        focusedLabelColor = Terracotta,
+                        focusedTextColor = textColor,
+                        unfocusedTextColor = textColor,
+                        focusedContainerColor = fieldBg,
+                        unfocusedContainerColor = fieldBg
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val cal = java.util.Calendar.getInstance()
+                    val fmt = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
+                    
+                    Surface(
+                        color = Terracotta.copy(alpha = 0.15f),
+                        shape = CircleShape,
+                        modifier = Modifier.clip(CircleShape).clickable { dueDate = fmt.format(cal.time) }
+                    ) {
+                        Text("Oggi", color = Terracotta, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
+                    }
+                    cal.add(java.util.Calendar.DAY_OF_YEAR, 7)
+                    Surface(
+                        color = Terracotta.copy(alpha = 0.15f),
+                        shape = CircleShape,
+                        modifier = Modifier.clip(CircleShape).clickable { dueDate = fmt.format(cal.time) }
+                    ) {
+                        Text("Tra 7 giorni", color = Terracotta, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
+                    }
+                    cal.add(java.util.Calendar.DAY_OF_YEAR, 23)
+                    Surface(
+                        color = Terracotta.copy(alpha = 0.15f),
+                        shape = CircleShape,
+                        modifier = Modifier.clip(CircleShape).clickable { dueDate = fmt.format(cal.time) }
+                    ) {
+                        Text("Tra 30 giorni", color = Terracotta, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
+                    }
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = isRecurring, onCheckedChange = { isRecurring = it })
+                    Spacer(Modifier.width(8.dp))
+                    Text(AppStrings.get(AppStrings.ricorrenza, appLang), color = textColor)
+                }
+                if (isRecurring) {
+                    OutlinedTextField(
+                        value = maxPaymentsStr,
+                        onValueChange = { maxPaymentsStr = it },
+                        label = { Text(AppStrings.get(AppStrings.numero_max_pagamenti_mese, appLang)) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(16.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Terracotta,
+                            unfocusedBorderColor = Color.Gray,
+                            focusedLabelColor = Terracotta,
+                            focusedTextColor = textColor,
+                            unfocusedTextColor = textColor,
+                            focusedContainerColor = fieldBg,
+                            unfocusedContainerColor = fieldBg
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val amount = parseAmount(amountStr) ?: 0.0
+                    if (title.isNotBlank() && amount > 0) {
+                        val maxP = maxPaymentsStr.toIntOrNull()
+                        onAdd(PaymentReminder(title, amount, dueDate.ifBlank { "Prossimamente" }, isRecurring, if (isRecurring) "Mensile" else null, maxP, 0))
+                    }
+                },
+                shape = CircleShape,
+                colors = ButtonDefaults.buttonColors(containerColor = Terracotta)
+            ) {
+                Text(AppStrings.get(AppStrings.salva, appLang), color = Color.White, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, shape = CircleShape) {
+                Text(AppStrings.get(AppStrings.annulla, appLang), color = Sage)
+            }
+        }
+    )
 }

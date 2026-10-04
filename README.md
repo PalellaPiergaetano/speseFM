@@ -22,10 +22,14 @@ Il repository contiene un MVP funzionante in Kotlin e Jetpack Compose. Il flusso
 
 ### Release beta
 
-La beta corrente è `1.0-beta01` (`versionCode 2`). L’APK è disponibile nel file `Spese_FM_Beta_v1.0.apk` nella root del repository. Per installarlo su un dispositivo con debug USB attivo:
+La beta corrente è `1.1.0-beta01` (`versionCode 3`). Puoi scaricare direttamente l’APK aggiornato da GitHub:
+
+[Scarica Spese FM Beta 1.1.0](https://github.com/PalellaPiergaetano/speseFM/raw/main/Spese_FM_Beta_v1.1.0.apk)
+
+Per installarlo su un dispositivo con debug USB attivo:
 
 ```bash
-adb install -r Spese_FM_Beta_v1.0.apk
+adb install -r Spese_FM_Beta_v1.1.0.apk
 ```
 
 Funzioni disponibili:
