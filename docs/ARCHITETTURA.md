@@ -28,10 +28,10 @@ data class Expense(
     val title: String,
     val category: String,
     val amount: Double,
-  val month: String = "settembre 26",
-  val date: String = "",
-  val time: String = "",
-  val description: String = ""
+    val month: String = "settembre 26",
+    val date: String = todayDate(),
+    val time: String = "",
+    val description: String = ""
 )
 ```
 
@@ -71,7 +71,7 @@ Per trasformare l’MVP in una versione più robusta:
 
 1. spostare modello e accesso dati in una `RoomDatabase`;
 2. introdurre `ViewModel` e stato osservabile per separare UI e logica;
-3. aggiungere identificativo, data completa, nota e valuta al movimento;
+3. rendere il salvataggio persistente anche per data, ora e descrizione;
 4. rendere il budget dipendente dal mese;
 5. cifrare il database o usare storage cifrato per dati finanziari;
 6. aggiungere test per aggregazioni, persistenza e casi di errore UI;
