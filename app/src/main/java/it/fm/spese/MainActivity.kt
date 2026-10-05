@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -741,6 +742,7 @@ private fun SpeseApp(
                 BackgroundCircles(isDarkTheme)
 
                 if (selectedExpense != null) {
+                    BackHandler { selectedExpense = null }
                     ExpenseDetailScreen(
                         expense = selectedExpense!!,
                         isDark = isDarkTheme,
@@ -753,6 +755,7 @@ private fun SpeseApp(
                         }
                     )
                 } else if (showRemindersScreen) {
+                    BackHandler { showRemindersScreen = false }
                     RemindersScreen(
                         reminders = reminders,
                         isDark = isDarkTheme,
@@ -786,6 +789,7 @@ private fun SpeseApp(
                         onClose = { showRemindersScreen = false }
                     )
                 } else if (showSettings) {
+                    BackHandler { showSettings = false }
                     SettingsScreen(
                         isDark = isDarkTheme,
                         isPrivacyMode = isPrivacyMode,
@@ -803,6 +807,9 @@ private fun SpeseApp(
                         onClose = { showSettings = false }
                     )
                 } else {
+                    if (selectedTab != 0) {
+                        BackHandler { selectedTab = 0 }
+                    }
                 Scaffold(
                     containerColor = Color.Transparent,
                     floatingActionButton = {
@@ -1296,7 +1303,7 @@ private fun MonthSelectorStrip(
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(
-                        "Tutti i Mesi",
+                        AppStrings.get(AppStrings.tutti_i_mesi, LocalAppLanguage.current),
                         color = if (isAllSelected) Color.White else textColor,
                         fontWeight = if (isAllSelected) FontWeight.Bold else FontWeight.Medium,
                         fontSize = 12.sp
@@ -1314,7 +1321,7 @@ private fun MonthSelectorStrip(
                 modifier = Modifier.clip(CircleShape).clickable { onMonthSelect(monthName) }
             ) {
                 Text(
-                    monthName,
+                    AppStrings.translateMonth(monthName, LocalAppLanguage.current),
                     color = if (isSelected) Color.White else textColor,
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                     fontSize = 12.sp,
@@ -1373,6 +1380,13 @@ private fun Dashboard(
                 Spacer(Modifier.height(2.dp))
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     Text(AppStrings.get(AppStrings.panoramica_spese, LocalAppLanguage.current), color = textColor, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
+                    androidx.compose.material3.IconButton(onClick = onTogglePrivacy) {
+                        Icon(
+                            if (isPrivacyMode) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                            contentDescription = "Privacy",
+                            tint = textColor
+                        )
+                    }
                     androidx.compose.material3.IconButton(onClick = onOpenSettingsClick) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings", tint = textColor)
                     }
@@ -1446,7 +1460,7 @@ private fun Dashboard(
                     modifier = Modifier.clip(CircleShape).clickable { onCategoryClick("") }
                 ) {
                     Text(
-                        "Vedi tutte",
+                        AppStrings.get(AppStrings.vedi_tutte, LocalAppLanguage.current),
                         color = Terracotta,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
@@ -1892,7 +1906,7 @@ private fun CategoryQuickStrip(expenses: List<Expense>, isDark: Boolean, isPriva
                         }
                         Spacer(Modifier.width(10.dp))
                         Column {
-                            Text(category, color = textColor, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(AppStrings.translateCategory(category, LocalAppLanguage.current), color = textColor, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(
                                 formatAmount(totalForCat, isPrivacyMode),
                                 color = subTextColor,
@@ -2034,7 +2048,7 @@ private fun Movements(
                         }
                     ) {
                         Text(
-                            "Tutte le categorie",
+                            AppStrings.get(AppStrings.tutte_le_categorie, LocalAppLanguage.current),
                             color = if (isAllSelected) Color.White else textColor,
                             fontWeight = if (isAllSelected) FontWeight.Bold else FontWeight.Medium,
                             fontSize = 12.sp,
@@ -2074,7 +2088,7 @@ private fun Movements(
                             }
                             Spacer(Modifier.width(6.dp))
                             Text(
-                                category,
+                                AppStrings.translateCategory(category, LocalAppLanguage.current),
                                 color = if (isSelected) Color.White else textColor,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                 fontSize = 12.sp
@@ -2160,7 +2174,7 @@ private fun ExpenseRow(expense: Expense, isDark: Boolean, isPrivacyMode: Boolean
                         modifier = Modifier.weight(1f, fill = false)
                     ) {
                         Text(
-                            text = expense.category,
+                            text = AppStrings.translateCategory(expense.category, LocalAppLanguage.current),
                             color = meta.color,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -2525,7 +2539,7 @@ Text(if (numMonths > 1) AppStrings.get(AppStrings.media_mese, appLang) else AppS
                                     }
                                     Spacer(Modifier.width(10.dp))
                                     Text(
-                                        category,
+                                        AppStrings.translateCategory(category, LocalAppLanguage.current),
                                         color = textColor,
                                         fontWeight = FontWeight.SemiBold,
                                         fontSize = 14.sp,
@@ -2685,7 +2699,7 @@ private fun CircularDonutChart(
             }
             Spacer(Modifier.height(4.dp))
             Text(
-                text = displayCategory ?: "Totale Mese",
+                text = if (displayCategory != null) AppStrings.translateCategory(displayCategory, LocalAppLanguage.current) else AppStrings.get(AppStrings.totale_mese, LocalAppLanguage.current),
                 color = subTextColor,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium
@@ -2709,6 +2723,8 @@ private fun AddExpenseDialog(
     onAdd: (Expense) -> Unit
 ) {
     var selectedTabMode by remember { mutableStateOf(0) } // 0 = IA, 1 = Manuale
+    var manualDate by remember { mutableStateOf(java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault()).format(java.util.Date())) }
+    var manualTime by remember { mutableStateOf(java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date())) }
 
     // IA State
     var aiInputText by remember { mutableStateOf("") }
@@ -2892,6 +2908,8 @@ private fun AddExpenseDialog(
             } else {
                 // INSERIMENTO MANUALE
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    val appLang = LocalAppLanguage.current
+
                     OutlinedTextField(
                         value = manualTitle,
                         onValueChange = { manualTitle = it },
@@ -2922,6 +2940,37 @@ private fun AddExpenseDialog(
                         modifier = Modifier.fillMaxWidth()
                     )
 
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedTextField(
+                            value = manualDate,
+                            onValueChange = { manualDate = it },
+                            label = { Text(AppStrings.get(AppStrings.data, appLang)) },
+                            singleLine = true,
+                            shape = RoundedCornerShape(16.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Terracotta,
+                                focusedLabelColor = Terracotta,
+                                focusedTextColor = textColor,
+                                unfocusedTextColor = textColor
+                            ),
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = manualTime,
+                            onValueChange = { manualTime = it },
+                            label = { Text(AppStrings.get(AppStrings.ora, appLang)) },
+                            singleLine = true,
+                            shape = RoundedCornerShape(16.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Terracotta,
+                                focusedLabelColor = Terracotta,
+                                focusedTextColor = textColor,
+                                unfocusedTextColor = textColor
+                            ),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
                     Text(AppStrings.get(AppStrings.categoria, LocalAppLanguage.current), color = textColor, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
 
                     ExposedDropdownMenuBox(
@@ -2931,7 +2980,7 @@ private fun AddExpenseDialog(
                     ) {
                         val currentMeta = getCategoryMeta(manualCategory)
                         OutlinedTextField(
-                            value = manualCategory,
+                            value = AppStrings.translateCategory(manualCategory, LocalAppLanguage.current),
                             onValueChange = {},
                             readOnly = true,
                             label = { Text(AppStrings.get(AppStrings.seleziona_categoria, LocalAppLanguage.current)) },
@@ -2988,7 +3037,7 @@ private fun AddExpenseDialog(
                                             }
                                             Spacer(Modifier.width(12.dp))
                                             Text(
-                                                category,
+                                                AppStrings.translateCategory(category, LocalAppLanguage.current),
                                                 color = textColor,
                                                 fontWeight = if (category == manualCategory) FontWeight.Bold else FontWeight.Normal
                                             )
@@ -3011,12 +3060,14 @@ private fun AddExpenseDialog(
                     if (selectedTabMode == 0) {
                         val amount = parsedAi.amount
                         if (amount != null && amount > 0) {
-                            onAdd(Expense(parsedAi.title, parsedAi.category, amount, currentMonth))
+                            val currentDate = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault()).format(java.util.Date())
+                        val currentTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
+                        onAdd(Expense(parsedAi.title, parsedAi.category, amount, currentMonth, date = currentDate, time = currentTime))
                         }
                     } else {
                         val parsedAmount = parseAmount(manualAmount)
                         if (parsedAmount != null && parsedAmount > 0) {
-                            onAdd(Expense(manualTitle.ifBlank { "Spesa" }, manualCategory, parsedAmount, currentMonth))
+                            onAdd(Expense(manualTitle.ifBlank { "Spesa" }, manualCategory, parsedAmount, currentMonth, date = manualDate, time = manualTime))
                         }
                     }
                 },
@@ -3072,15 +3123,16 @@ private fun SetBudgetDialog(
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                val appLang = LocalAppLanguage.current
                 Text(
-                    "Imposta il tetto di spesa desiderato per ciascun mese. L'anello di progresso si aggiornerà automaticamente.",
+                    AppStrings.get(AppStrings.imposta_il_tetto_di_spesa_desiderato_per_ciascun_mese_l_anello_di_progresso_si_aggiorner_automaticamente, appLang),
                     color = textColor.copy(alpha = 0.8f),
                     fontSize = 13.sp
                 )
                 OutlinedTextField(
                     value = budgetText,
                     onValueChange = { budgetText = it },
-                    label = { Text("Budget Mensile (€)") },
+                    label = { Text(AppStrings.get(AppStrings.budget_mensile, appLang) + " (€)") },
                     singleLine = true,
                     shape = RoundedCornerShape(16.dp),
                     colors = OutlinedTextFieldDefaults.colors(
@@ -3676,18 +3728,7 @@ fun SettingsScreen(
                     textColor = textColor
                 )
 
-                SettingsItemRow(
-                    icon = if (isPrivacyMode) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                    title = AppStrings.get(AppStrings.privacy, appLang),
-                    subtitle = AppStrings.get(AppStrings.nascondi_saldi, appLang),
-                    onClick = onTogglePrivacy,
-                    isDark = isDark,
-                    cardBg = cardBg,
-                    textColor = textColor,
-                    action = {
-                        androidx.compose.material3.Switch(checked = isPrivacyMode, onCheckedChange = { onTogglePrivacy() })
-                    }
-                )
+
 
                 SettingsItemRow(
                     icon = Icons.Default.Lock,
