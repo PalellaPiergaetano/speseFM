@@ -38,11 +38,11 @@ Funzioni disponibili:
 - sblocco con biometria o credenziale del dispositivo;
 - interfaccia multilingua con italiano, inglese, francese e spagnolo;
 - dashboard con totale, budget, progresso e suggerimento di risparmio;
-- inserimento manuale e inserimento da frase naturale, ad esempio `cena 24,50`;
+- inserimento manuale e inserimento da frase naturale, ad esempio `cena 24,50`; il mese viene derivato dalla data della spesa;
 - promemoria per pagamenti ricorrenti, scadenze e registrazione del pagamento come nuova spesa;
 - riconoscimento locale di importo e categoria tramite regole;
 - importazione di file `.xlsx`, `.xlsm` e `.csv`, con rilevamento del formato e del delimitatore anche quando il provider Android non restituisce l'estensione;
-- filtro per mese e categoria;
+- filtro per mese e categoria, con mese corrente sempre disponibile e tap sul filtro attivo per tornare alla vista completa;
 - elenco movimenti con ricerca, dettaglio, data/ora e eliminazione;
 - report con grafico a ciambella, percentuali, media mensile, media giornaliera e spesa massima;
 - confronto aggregato per anno;

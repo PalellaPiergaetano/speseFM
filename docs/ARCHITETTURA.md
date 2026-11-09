@@ -28,12 +28,14 @@ data class Expense(
     val title: String,
     val category: String,
     val amount: Double,
-    val month: String = "settembre 26",
+    val month: String = "mese corrente",
     val date: String = todayDate(),
     val time: String = "",
     val description: String = ""
 )
 ```
+
+Quando viene creata una spesa, il campo `month` viene normalizzato a partire dalla data (`dd/MM/yyyy`, `dd/MM/yy` e varianti senza zeri iniziali). La dashboard aggiunge inoltre il mese corrente all’elenco dei filtri anche quando non esistono ancora movimenti per quel mese.
 
 Le categorie standard sono `Spesa`, `Trasporti`, `Bar / Ristoranti / Uscite`, `Mediche`, `Fitto / Bollette / Casa`, `Regali`, `Ricorrenti` e `Altro`. Il mapping riconosce anche varianti del foglio originale, come `BAR/RISTORANTI/LOCALI` e `FITTO/BOLLETTE`.
 

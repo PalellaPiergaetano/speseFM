@@ -386,6 +386,26 @@ fun exportCsv(context: Context, uri: Uri, expenses: List<Expense>) {
 }
 
 
+
+fun getCurrentCalendarMonth(): String {
+    return java.text.SimpleDateFormat("MMMM yy", java.util.Locale.ITALIAN).format(java.util.Date()).lowercase()
+}
+
+fun getExpenseMonthFromDate(dateStr: String): String {
+    if (dateStr.isBlank()) return getCurrentCalendarMonth()
+    val formats = listOf("dd/MM/yyyy", "dd/MM/yy", "yyyy-MM-dd", "d/M/yyyy", "d/M/yy")
+    for (fmt in formats) {
+        try {
+            val date = java.text.SimpleDateFormat(fmt, java.util.Locale.getDefault()).parse(dateStr)
+            if (date != null) {
+                return java.text.SimpleDateFormat("MMMM yy", java.util.Locale.ITALIAN).format(date).lowercase()
+            }
+        } catch (e: Exception) {}
+    }
+    return getCurrentCalendarMonth()
+}
+
+
 private const val ExpenseStore = "expense_store"
 
 private fun loadExpenses(context: Context): List<Expense> {
@@ -710,8 +730,9 @@ private fun SpeseApp(
     var selectedMonthFilter by remember { mutableStateOf<String?>(null) }
 
     val availableMonths = remember(expenses) {
-        val list = expenses.map { it.month }.distinct()
-        if (list.isEmpty()) listOf("settembre 26") else list
+        val nowMonth = getCurrentCalendarMonth()
+        val list = (listOf(nowMonth) + expenses.map { it.month }).distinct()
+        list
     }
 
     val activeMonthExpenses = remember(expenses, selectedMonthFilter) {
@@ -1286,10 +1307,10 @@ private fun MonthSelectorStrip(
         item {
             val isAllSelected = selectedMonth.isNullOrBlank()
             Surface(
+                onClick = { onMonthSelect(null) },
                 color = if (isAllSelected) Terracotta else cardBg,
                 shape = CircleShape,
-                shadowElevation = if (isAllSelected) 3.dp else 1.dp,
-                modifier = Modifier.clip(CircleShape).clickable { onMonthSelect(null) }
+                shadowElevation = if (isAllSelected) 3.dp else 1.dp
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
@@ -1315,10 +1336,12 @@ private fun MonthSelectorStrip(
         items(availableMonths) { monthName ->
             val isSelected = selectedMonth?.equals(monthName, ignoreCase = true) == true
             Surface(
+                onClick = {
+                    if (isSelected) onMonthSelect(null) else onMonthSelect(monthName)
+                },
                 color = if (isSelected) Terracotta else cardBg,
                 shape = CircleShape,
-                shadowElevation = if (isSelected) 3.dp else 1.dp,
-                modifier = Modifier.clip(CircleShape).clickable { onMonthSelect(monthName) }
+                shadowElevation = if (isSelected) 3.dp else 1.dp
             ) {
                 Text(
                     AppStrings.translateMonth(monthName, LocalAppLanguage.current),
@@ -3062,12 +3085,14 @@ private fun AddExpenseDialog(
                         if (amount != null && amount > 0) {
                             val currentDate = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault()).format(java.util.Date())
                         val currentTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
-                        onAdd(Expense(parsedAi.title, parsedAi.category, amount, currentMonth, date = currentDate, time = currentTime))
+                        val derivedMonth = getExpenseMonthFromDate(currentDate)
+                        onAdd(Expense(parsedAi.title, parsedAi.category, amount, month = derivedMonth, date = currentDate, time = currentTime))
                         }
                     } else {
                         val parsedAmount = parseAmount(manualAmount)
                         if (parsedAmount != null && parsedAmount > 0) {
-                            onAdd(Expense(manualTitle.ifBlank { "Spesa" }, manualCategory, parsedAmount, currentMonth, date = manualDate, time = manualTime))
+                            val derivedMonth = getExpenseMonthFromDate(manualDate)
+                            onAdd(Expense(manualTitle.ifBlank { "Spesa" }, manualCategory, parsedAmount, month = derivedMonth, date = manualDate, time = manualTime))
                         }
                     }
                 },
