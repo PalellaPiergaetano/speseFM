@@ -5,7 +5,7 @@
 - **Lista movimenti**: Visualizzazione cronologica/per mese delle spese effettuate.
 - **Filtri e ricerca**: Filtraggio per mese e per categoria direttamente dalla dashboard; il mese corrente è sempre disponibile e un secondo tap sul mese attivo ripristina la vista completa.
 - **Mese dalla data**: Il mese del movimento viene calcolato dalla data inserita, anche quando la spesa viene aggiunta tramite frase naturale.
-- **Cancellazione**: Azione di eliminazione dalla lista dei movimenti.
+- **Modifica e cancellazione**: I movimenti possono essere modificati o eliminati dalla lista; entrambe le operazioni richiedono conferma quando previsto dall'azione.
 - **Aggiunta IA (Smart)**: Analisi automatica del titolo della spesa per suggerire la categoria più appropriata.
 - **Dettaglio movimento**: Visualizzazione di data, ora, categoria, importo e descrizione quando disponibili.
 
