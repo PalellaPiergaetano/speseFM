@@ -22,14 +22,14 @@ Il repository contiene un MVP funzionante in Kotlin e Jetpack Compose. Il flusso
 
 ### Release beta
 
-La beta corrente è `1.1.0-beta01` (`versionCode 3`). Puoi scaricare direttamente l’APK aggiornato da GitHub:
+La beta corrente è `1.2.0-beta01` (`versionCode 4`). Puoi scaricare direttamente l’APK aggiornato da GitHub:
 
-[Scarica Spese FM Beta 1.1.0](https://github.com/PalellaPiergaetano/speseFM/raw/main/Spese_FM_Beta_v1.1.0.apk)
+[Scarica Spese FM Beta 1.2.0](https://github.com/PalellaPiergaetano/speseFM/raw/main/Spese_FM_Beta_v1.2.0.apk)
 
 Per installarlo su un dispositivo con debug USB attivo:
 
 ```bash
-adb install -r Spese_FM_Beta_v1.1.0.apk
+adb install -r Spese_FM_Beta_v1.2.0.apk
 ```
 
 Funzioni disponibili:
@@ -39,7 +39,7 @@ Funzioni disponibili:
 - interfaccia multilingua con italiano, inglese, francese e spagnolo;
 - dashboard con totale, budget, progresso e suggerimento di risparmio;
 - inserimento manuale e inserimento da frase naturale, ad esempio `cena 24,50`;
-- il mese viene derivato dalla data della spesa, anche per l'inserimento da frase naturale;
+- mese del movimento derivato dalla data inserita, anche per le frasi naturali;
 - promemoria per pagamenti ricorrenti, scadenze e registrazione del pagamento come nuova spesa;
 - riconoscimento locale di importo e categoria tramite regole;
 - importazione di file `.xlsx`, `.xlsm` e `.csv`, con rilevamento del formato e del delimitatore anche quando il provider Android non restituisce l'estensione;
