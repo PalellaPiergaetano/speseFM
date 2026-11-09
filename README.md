@@ -44,7 +44,7 @@ Funzioni disponibili:
 - riconoscimento locale di importo e categoria tramite regole;
 - importazione di file `.xlsx`, `.xlsm` e `.csv`, con rilevamento del formato e del delimitatore anche quando il provider Android non restituisce l'estensione;
 - filtro per mese e categoria, con mese corrente sempre disponibile e tap sul filtro attivo per tornare alla vista completa;
-- elenco movimenti con ricerca, dettaglio, modifica e eliminazione con conferma;
+- elenco movimenti con ricerca, dettaglio, data/ora ed eliminazione con conferma;
 - report con grafico a ciambella, percentuali, media mensile, media giornaliera e spesa massima;
 - confronto aggregato per anno;
 - modalità privacy per nascondere gli importi;

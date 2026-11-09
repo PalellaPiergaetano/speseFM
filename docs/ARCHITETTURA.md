@@ -37,11 +37,7 @@ data class Expense(
 
 Le categorie standard sono `Spesa`, `Trasporti`, `Bar / Ristoranti / Uscite`, `Mediche`, `Fitto / Bollette / Casa`, `Regali`, `Ricorrenti` e `Altro`. Il mapping riconosce anche varianti del foglio originale, come `BAR/RISTORANTI/LOCALI` e `FITTO/BOLLETTE`.
 
-Per le nuove spese, `month` viene ricavato da `date` nei formati supportati
-(`dd/MM/yyyy`, `dd/MM/yy` e varianti senza zeri iniziali). Le spese importate
-mantengono invece il mese letto dal file. La dashboard aggiunge il mese
-calendario corrente ai filtri anche quando non ci sono ancora movimenti e il
-tap sul filtro attivo rimuove la selezione.
+Per le nuove spese, `month` viene ricavato da `date` nei formati supportati (`dd/MM/yyyy`, `dd/MM/yy` e varianti senza zeri iniziali). Le spese importate mantengono invece il mese letto dal file. La dashboard aggiunge il mese calendario corrente ai filtri anche quando non ci sono ancora movimenti e il tap sul filtro attivo rimuove la selezione.
 
 ## Persistenza
 
