@@ -2235,8 +2235,16 @@ private fun ExpenseRow(expense: Expense, isDark: Boolean, isPrivacyMode: Boolean
 
             Spacer(Modifier.width(8.dp))
 
+            var showRowDeleteConfirm by remember { mutableStateOf(false) }
+            if (showRowDeleteConfirm) {
+                DeleteExpenseConfirmDialog(
+                    isDarkTheme = isDark,
+                    onDismiss = { showRowDeleteConfirm = false },
+                    onConfirm = { onDelete(expense) }
+                )
+            }
             IconButton(
-                onClick = { onDelete(expense) },
+                onClick = { showRowDeleteConfirm = true },
                 modifier = Modifier
                     .size(32.dp)
                     .background(Terracotta.copy(alpha = 0.12f), CircleShape)
@@ -4224,7 +4232,15 @@ fun ReminderCard(
                 )
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = onDelete, contentPadding = PaddingValues(4.dp)) {
+                    var showReminderDeleteConfirm by remember { mutableStateOf(false) }
+                    if (showReminderDeleteConfirm) {
+                        DeleteExpenseConfirmDialog(
+                            isDarkTheme = isDark,
+                            onDismiss = { showReminderDeleteConfirm = false },
+                            onConfirm = onDelete
+                        )
+                    }
+                    TextButton(onClick = { showReminderDeleteConfirm = true }, contentPadding = PaddingValues(4.dp)) {
                         Text(AppStrings.get(AppStrings.elimina, appLang), color = Color.Gray, fontSize = 12.sp)
                     }
                     Button(
