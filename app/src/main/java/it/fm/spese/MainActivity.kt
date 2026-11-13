@@ -773,6 +773,11 @@ private fun SpeseApp(
                             expenses = expenses.filter { it != e }
                             saveExpenses(context, expenses)
                             selectedExpense = null
+                        },
+                        onSaveEdit = { updated ->
+                            expenses = expenses.map { if (it == selectedExpense) updated else it }
+                            saveExpenses(context, expenses)
+                            selectedExpense = updated
                         }
                     )
                 } else if (showRemindersScreen) {
@@ -1406,7 +1411,7 @@ private fun Dashboard(
                     androidx.compose.material3.IconButton(onClick = onTogglePrivacy) {
                         Icon(
                             if (isPrivacyMode) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                            contentDescription = "Privacy",
+                            contentDescription = AppStrings.get(AppStrings.privacy, LocalAppLanguage.current),
                             tint = textColor
                         )
                     }
@@ -2994,6 +2999,37 @@ private fun AddExpenseDialog(
                         )
                     }
 
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedTextField(
+                            value = manualDate,
+                            onValueChange = { manualDate = it },
+                            label = { Text(AppStrings.get(AppStrings.data, appLang)) },
+                            singleLine = true,
+                            shape = RoundedCornerShape(16.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Terracotta,
+                                focusedLabelColor = Terracotta,
+                                focusedTextColor = textColor,
+                                unfocusedTextColor = textColor
+                            ),
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = manualTime,
+                            onValueChange = { manualTime = it },
+                            label = { Text(AppStrings.get(AppStrings.ora, appLang)) },
+                            singleLine = true,
+                            shape = RoundedCornerShape(16.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Terracotta,
+                                focusedLabelColor = Terracotta,
+                                focusedTextColor = textColor,
+                                unfocusedTextColor = textColor
+                            ),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
                     Text(AppStrings.get(AppStrings.categoria, LocalAppLanguage.current), color = textColor, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
 
                     ExposedDropdownMenuBox(
@@ -3860,12 +3896,38 @@ fun ExpenseDetailScreen(
     expense: Expense,
     isDark: Boolean,
     onClose: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onSaveEdit: (Expense) -> Unit
 ) {
     val textColor = if (isDark) Color(0xFFF3EFEA) else Color(0xFF1E1B18)
     val cardBg = if (isDark) Color(0xFF1E1C1A) else Color.White
     val subTextColor = if (isDark) Color(0xFFA0B2A3) else Color(0xFF5B7B68)
     val appLang = LocalAppLanguage.current
+
+    var showEditDialog by remember { mutableStateOf(false) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    if (showEditDialog) {
+        EditExpenseDialog(
+            expense = expense,
+            isDarkTheme = isDark,
+            onDismiss = { showEditDialog = false },
+            onSave = { updated ->
+                onSaveEdit(updated)
+            }
+        )
+    }
+
+    if (showDeleteConfirm) {
+        DeleteExpenseConfirmDialog(
+            isDarkTheme = isDark,
+            onDismiss = { showDeleteConfirm = false },
+            onConfirm = {
+                onDelete()
+                onClose()
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -3874,6 +3936,11 @@ fun ExpenseDetailScreen(
                 navigationIcon = {
                     androidx.compose.material3.IconButton(onClick = onClose) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = AppStrings.get(AppStrings.indietro, appLang), tint = textColor)
+                    }
+                },
+                actions = {
+                    androidx.compose.material3.IconButton(onClick = { showEditDialog = true }) {
+                        Icon(Icons.Default.Edit, contentDescription = AppStrings.get(AppStrings.modifica, appLang), tint = textColor)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
@@ -3942,7 +4009,7 @@ fun ExpenseDetailScreen(
             Spacer(Modifier.weight(1f))
             
             Button(
-                onClick = { onDelete(); onClose() },
+                onClick = { showDeleteConfirm = true },
                 modifier = Modifier.fillMaxWidth().height(56.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD95D39)),
                 shape = RoundedCornerShape(16.dp)
@@ -4318,6 +4385,261 @@ fun AddReminderDialog(
                         val maxP = maxPaymentsStr.toIntOrNull()
                         onAdd(PaymentReminder(title, amount, dueDate.ifBlank { "Prossimamente" }, isRecurring, if (isRecurring) "Mensile" else null, maxP, 0))
                     }
+                },
+                shape = CircleShape,
+                colors = ButtonDefaults.buttonColors(containerColor = Terracotta)
+            ) {
+                Text(AppStrings.get(AppStrings.salva, appLang), color = Color.White, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, shape = CircleShape) {
+                Text(AppStrings.get(AppStrings.annulla, appLang), color = Sage)
+            }
+        }
+    )
+}
+
+
+@Composable
+fun DeleteExpenseConfirmDialog(
+    isDarkTheme: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    val appLang = LocalAppLanguage.current
+    val textColor = if (isDarkTheme) Color(0xFFF3EFEA) else Color(0xFF1E1B18)
+    val dialogBg = if (isDarkTheme) Color(0xFF1D1B18) else Color.White
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(28.dp),
+        containerColor = dialogBg,
+        title = {
+            Text(AppStrings.get(AppStrings.conferma_eliminazione, appLang), color = textColor, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        },
+        text = {
+            Text(AppStrings.get(AppStrings.sei_sicuro_di_voler_eliminare_questa_spesa, appLang), color = textColor.copy(alpha = 0.8f), fontSize = 14.sp)
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onConfirm()
+                    onDismiss()
+                },
+                shape = CircleShape,
+                colors = ButtonDefaults.buttonColors(containerColor = Terracotta)
+            ) {
+                Text(AppStrings.get(AppStrings.elimina, appLang), color = Color.White, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, shape = CircleShape) {
+                Text(AppStrings.get(AppStrings.annulla, appLang), color = Sage)
+            }
+        }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EditExpenseDialog(
+    expense: Expense,
+    isDarkTheme: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (Expense) -> Unit
+) {
+    var title by remember { mutableStateOf(expense.title) }
+    var amountStr by remember { mutableStateOf(expense.amount.toString()) }
+    var category by remember { mutableStateOf(expense.category) }
+    var date by remember { mutableStateOf(expense.date) }
+    var time by remember { mutableStateOf(expense.time) }
+    var description by remember { mutableStateOf(expense.description) }
+    var dropdownExpanded by remember { mutableStateOf(false) }
+
+    val textColor = if (isDarkTheme) Color(0xFFF3EFEA) else Color(0xFF1E1B18)
+    val dialogBg = if (isDarkTheme) Color(0xFF1D1B18) else Color.White
+    val appLang = LocalAppLanguage.current
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(32.dp),
+        containerColor = dialogBg,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(Terracotta.copy(alpha = 0.15f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.Edit, contentDescription = null, tint = Terracotta)
+                }
+                Spacer(Modifier.width(12.dp))
+                Text(AppStrings.get(AppStrings.modifica_spesa, appLang), color = textColor, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text(AppStrings.get(AppStrings.descrizione, appLang)) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(16.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Terracotta,
+                        focusedLabelColor = Terracotta,
+                        focusedTextColor = textColor,
+                        unfocusedTextColor = textColor
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = amountStr,
+                    onValueChange = { amountStr = it },
+                    label = { Text(AppStrings.get(AppStrings.importo, appLang) + " (€)") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(16.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Terracotta,
+                        focusedLabelColor = Terracotta,
+                        focusedTextColor = textColor,
+                        unfocusedTextColor = textColor
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = date,
+                        onValueChange = { date = it },
+                        label = { Text(AppStrings.get(AppStrings.data, appLang)) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(16.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Terracotta,
+                            focusedLabelColor = Terracotta,
+                            focusedTextColor = textColor,
+                            unfocusedTextColor = textColor
+                        ),
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = time,
+                        onValueChange = { time = it },
+                        label = { Text(AppStrings.get(AppStrings.ora, appLang)) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(16.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Terracotta,
+                            focusedLabelColor = Terracotta,
+                            focusedTextColor = textColor,
+                            unfocusedTextColor = textColor
+                        ),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Text(AppStrings.get(AppStrings.categoria, appLang), color = textColor, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+
+                ExposedDropdownMenuBox(
+                    expanded = dropdownExpanded,
+                    onExpandedChange = { dropdownExpanded = !dropdownExpanded },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    val currentMeta = getCategoryMeta(category)
+                    OutlinedTextField(
+                        value = AppStrings.translateCategory(category, appLang),
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text(AppStrings.get(AppStrings.seleziona_categoria, appLang)) },
+                        leadingIcon = {
+                            Box(
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .background(currentMeta.color.copy(alpha = 0.15f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = currentMeta.icon,
+                                    contentDescription = null,
+                                    tint = currentMeta.color,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = dropdownExpanded) },
+                        shape = RoundedCornerShape(16.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Terracotta,
+                            focusedLabelColor = Terracotta,
+                            focusedTextColor = textColor,
+                            unfocusedTextColor = textColor
+                        ),
+                        modifier = Modifier
+                            .menuAnchor(MenuAnchorType.PrimaryNotEditable, true)
+                            .fillMaxWidth()
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = dropdownExpanded,
+                        onDismissRequest = { dropdownExpanded = false },
+                        modifier = Modifier.background(dialogBg)
+                    ) {
+                        allCategories.forEach { cat ->
+                            val meta = getCategoryMeta(cat)
+                            DropdownMenuItem(
+                                text = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(28.dp)
+                                                .background(meta.color.copy(alpha = 0.15f), CircleShape),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = meta.icon,
+                                                contentDescription = null,
+                                                tint = meta.color,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                        Spacer(Modifier.width(12.dp))
+                                        Text(
+                                            AppStrings.translateCategory(cat, appLang),
+                                            color = textColor,
+                                            fontWeight = if (cat == category) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    category = cat
+                                    dropdownExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val parsedAmount = parseAmount(amountStr) ?: expense.amount
+                    val derivedMonth = getExpenseMonthFromDate(date)
+                    val updated = expense.copy(
+                        title = title.ifBlank { "Spesa" },
+                        amount = parsedAmount,
+                        category = category,
+                        month = derivedMonth,
+                        date = date,
+                        time = time,
+                        description = description
+                    )
+                    onSave(updated)
+                    onDismiss()
                 },
                 shape = CircleShape,
                 colors = ButtonDefaults.buttonColors(containerColor = Terracotta)
